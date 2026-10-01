@@ -2,6 +2,7 @@
 // À côté du panier intact : un encart « ton skater porte ton panier » (pièces portées, doublons
 // dans le sac à dos), et à la demande le jeu en mode vestiaire. Chargé par un petit script de la
 // boutique sur la page panier seulement. Lit les lignes du panier sans jamais les modifier.
+// Récompenses : fournisseur `window.RespawnRewards` posé par la page (aucun code promo dans ce dépôt).
 (function () {
   // servi par jsDelivr depuis le même commit que le jeu : le bundle et le catalogue se déduisent de l'adresse de ce fichier
   var SELF = (document.currentScript && document.currentScript.src) || '';
@@ -91,7 +92,7 @@
     btn.addEventListener('click', function () {
       btn.disabled = true;
       import(BUNDLE).then(function (m) {
-        m.mount(null, { overlay: true, shopUrl: '/', vestiaire: { items: readCart() }, remember: false });
+        m.mount(null, { overlay: true, shopUrl: '/', vestiaire: { items: readCart() }, remember: false, rewards: window.RespawnRewards });
       }).catch(function () {}).then(function () { btn.disabled = false; });
     });
   }

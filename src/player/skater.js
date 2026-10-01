@@ -215,7 +215,13 @@ function garmentZones(rig, A) {
   // jamais une découpe qui suit la frontière des os (effet justaucorps)
   const trunkBones = [...B.spine, B.clav.L, B.clav.R, B.body, B.thigh.L, B.thigh.R];
   const above = (i, hem) => is(i, ...trunkBones) && y(i) > hem && y(i) < rig.shoulderY + 0.12;
-  const torso = (i) => above(i, waist - 0.05);
+  // ourlet : droit sur les côtés et le dos, remonté devant au centre (sinon le pli de l'aine
+  // dessine un V de justaucorps quand le skater fléchit)
+  const hemFront = (i) => {
+    const x = Math.abs(A.model[i * 3]), z = A.model[i * 3 + 2];
+    return z > 0 ? 0.1 * (1 - THREE.MathUtils.smoothstep(x, 0.04, 0.15)) : 0;
+  };
+  const torso = (i) => above(i, waist - 0.05 + hemFront(i));
   // drapé : le tissu tombe de la poitrine au lieu de coller sous le buste
   let chestZ = -1, chestY = 0;
   for (let i = 0; i < A.dom.length; i++) {

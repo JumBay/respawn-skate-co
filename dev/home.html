@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Accueil simulé</title>
+<style>
+  body{margin:0;font:16px system-ui;background:#f3f0e8;color:#1a1026}
+  header{padding:18px 24px;background:#1a1026;color:#c8ff2e;font-weight:900;letter-spacing:.05em}
+  main{max-width:960px;margin:0 auto;padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
+  .card{background:#fff;border-radius:12px;height:260px;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+  #replay{position:fixed;right:18px;bottom:18px;z-index:50;font:800 15px system-ui;padding:.8em 1.2em;border-radius:999px;border:3px solid #1a1026;background:#c8ff2e;cursor:pointer;display:none}
+</style></head>
+<body>
+<header>RESPAWN SKATE CO. — accueil simulé (intégration de test)</header>
+<main>
+  <div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div>
+</main>
+<button id="replay" type="button">▶ Rejouer</button>
+<script type="module">
+  // Ce que fera l'intégration sur l'accueil : le jeu en couche plein écran, fermé par « Sortir »,
+  // un bouton flottant « Rejouer » qui le remonte. Le choix de sortie est mémorisé par le jeu.
+  import { mount, wasExited, clearExited } from '/src/main.js';
+  const replay = document.getElementById('replay');
+  let game = null;
+  async function open() {
+    clearExited();
+    replay.style.display = 'none';
+    game = await mount(null, { overlay: true, shopUrl: '/', onEvent: (n, d) => console.info('[respawn]', n, d) });
+  }
+  window.addEventListener('respawn:destroy', () => { game = null; replay.style.display = 'block'; });
+  replay.addEventListener('click', open);
+  if (wasExited() && !location.search.includes('force')) replay.style.display = 'block'; else open();
+</script>
+</body></html>

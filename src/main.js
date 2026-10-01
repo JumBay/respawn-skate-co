@@ -32,6 +32,20 @@ export const clearExited = () => save('exited', false);
 
 export async function mount(el, opts = {}) {
   const shopUrl = opts.shopUrl || '/';
+  // couche plein écran : le jeu crée son propre calque fixe au-dessus de la page et bloque le
+  // défilement tant qu'il est monté (rendu à l'identique au démontage)
+  let layer = null, prevOverflow = null, api = null, destroyed = false;
+  if (opts.overlay || !el) {
+    layer = document.createElement('div');
+    layer.className = 'rs-layer';
+    layer.setAttribute('role', 'region');
+    layer.setAttribute('aria-label', 'Respawn Skate Co.');
+    Object.assign(layer.style, { position: 'fixed', inset: '0', zIndex: String(opts.zIndex || 2147483000), background: '#2a1b52' });
+    (el || document.body).appendChild(layer);
+    el = layer;
+    prevOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
+  }
   const quality = detectQuality(opts);
   const assetBase = opts.assetBase || (import.meta.env && import.meta.env.DEV ? '/' : new URL(/* @vite-ignore */ '../public/', import.meta.url).href);
   const cleanups = [];
@@ -47,7 +61,9 @@ export async function mount(el, opts = {}) {
   const exitToShop = () => {
     save('exited', true);
     emitOut('exit', {});
-    if (opts.onExit) opts.onExit(); else location.href = shopUrl;
+    if (opts.onExit) opts.onExit();
+    else if (layer) api.destroy();
+    else location.href = shopUrl;
   };
   // événements vers l'intégration : opts.onEvent(nom, données) et window « respawn:<nom> »
   const emitOut = (name, data) => {
@@ -63,13 +79,13 @@ export async function mount(el, opts = {}) {
     profile.muted = !profile.muted; audio.setMuted(profile.muted); saveProfile(profile); renderTop();
   } });
   const langBtn = h('button', { class: 'rs-chip', onClick: () => setLang(getLang() === 'fr' ? 'en' : 'fr') });
-  const shopBtn = h('a', { class: 'rs-chip rs-chip--shop', href: shopUrl, onClick: (e) => { if (opts.onExit) { e.preventDefault(); exitToShop(); } } });
+  const shopBtn = h('a', { class: 'rs-chip rs-chip--shop', href: shopUrl, onClick: (e) => { e.preventDefault(); exitToShop(); } });
   const topbar = h('div', { class: 'rs-topbar' }, langBtn, soundBtn, shopBtn);
   function renderTop() {
     soundBtn.innerHTML = ''; soundBtn.append(icon(profile.muted ? 'soundOff' : 'soundOn'), h('span', { class: 'rs-chip-label' }, t(profile.muted ? 'sound.off' : 'sound.on')));
     soundBtn.setAttribute('aria-pressed', String(!profile.muted));
     langBtn.textContent = t('lang'); langBtn.setAttribute('aria-label', getLang() === 'fr' ? 'English' : 'Français');
-    shopBtn.innerHTML = ''; shopBtn.append(icon('shop'), h('span', { class: 'rs-chip-label' }, t(opts.onExit ? 'shopmode.exit' : 'shopmode')));
+    shopBtn.innerHTML = ''; shopBtn.append(icon('shop'), h('span', { class: 'rs-chip-label' }, t(opts.onExit || layer ? 'shopmode.exit' : 'shopmode')));
   }
   renderTop();
 
@@ -79,7 +95,8 @@ export async function mount(el, opts = {}) {
       h('h1', { class: 'rs-logo' }, 'Respawn', h('small', {}, 'Skate Co.')),
       h('p', {}, t('webgl.text')),
       h('a', { class: 'rs-btn rs-btn--acid', href: shopUrl }, t('shopmode')))), topbar);
-    return { destroy: () => root.remove() };
+    api = { destroy: () => { if (destroyed) return; destroyed = true; root.remove(); if (layer) { layer.remove(); document.documentElement.style.overflow = prevOverflow || ''; } emitOut('destroy', {}); } };
+    return api;
   }
 
   // --- écran titre (affiche instantanée) -----------------------------------------------------------------
@@ -526,18 +543,22 @@ export async function mount(el, opts = {}) {
     window.addEventListener('keydown', (e) => { if (e.code === 'F2') game.toggleSkeleton(); });
   }
 
-  return {
+  api = {
     get game() { return game; },
     openSpawn: () => game && openSpawn(),
     openShop: () => game && openShop(),
     pause: () => openPause(),
     bridge: () => bridge,
     destroy() {
+      if (destroyed) return; destroyed = true;
       for (const f of cleanups) try { f(); } catch (e) { /* rien */ }
       if (game) { game.dispose(); }
       if (input) input.dispose();
       audio.dispose();
       root.remove();
+      if (layer) { layer.remove(); document.documentElement.style.overflow = prevOverflow || ''; }
+      emitOut('destroy', {});
     },
   };
+  return api;
 }

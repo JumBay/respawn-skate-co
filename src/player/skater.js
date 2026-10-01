@@ -209,18 +209,35 @@ function garmentZones(rig, A) {
   const y = (i) => A.model[i * 3 + 1];
   const armDist = (i, s) => { const p = sh(s); return Math.hypot(A.model[i * 3] - p.x, A.model[i * 3 + 1] - p.y, A.model[i * 3 + 2] - p.z); };
   const sideOf = (i) => (A.model[i * 3] > 0 ? 'L' : 'R');
-  const torso = (i) => is(i, ...B.spine, B.clav.L, B.clav.R) || (is(i, B.body) && y(i) > waist - 0.05);
-  const chestPush = (i) => { const z = A.model[i * 3 + 2]; return z > 0.02 && y(i) > waist + 0.15 && y(i) < rig.shoulderY ? 0.012 : 0; };
+  const isArm = (i) => is(i, B.uarm.L, B.uarm.R, B.farm.L, B.farm.R, B.hand.L, B.hand.R);
+  // ourlet horizontal : tout ce qui est au-dessus de la ligne (tronc, bassin, haut des cuisses),
+  // jamais une découpe qui suit la frontière des os (effet justaucorps)
+  const trunkBones = [...B.spine, B.clav.L, B.clav.R, B.body, B.thigh.L, B.thigh.R];
+  const above = (i, hem) => is(i, ...trunkBones) && y(i) > hem && y(i) < rig.shoulderY + 0.12;
+  const torso = (i) => above(i, waist - 0.03);
+  // drapé : le tissu tombe de la poitrine au lieu de coller sous le buste
+  let chestZ = -1, chestY = 0;
+  for (let i = 0; i < A.dom.length; i++) {
+    if (!is(i, ...B.spine) || y(i) < waist + 0.12 || y(i) > rig.shoulderY) continue;
+    if (Math.abs(A.model[i * 3]) < 0.12 && A.model[i * 3 + 2] > chestZ) { chestZ = A.model[i * 3 + 2]; chestY = y(i); }
+  }
+  const drape = (i, slope = 0.3) => {
+    const nz = A.sn[i * 3 + 2];
+    if (nz < 0.25 || y(i) > chestY || y(i) < waist - 0.12) return 0;
+    const target = chestZ - (chestY - y(i)) * slope;
+    return Math.max(0, target - A.model[i * 3 + 2]) / Math.max(0.35, nz);
+  };
+  const chestPush = (i) => drape(i);
   const upperArm = (i) => is(i, B.uarm.L, B.uarm.R);
   const foreArm = (i) => is(i, B.farm.L, B.farm.R);
   const legs = (i) => (is(i, B.body, B.spine[0]) && y(i) < waist + 0.05) || is(i, B.thigh.L, B.thigh.R, B.calf.L, B.calf.R);
   const feet = (i) => /^(foot|ball)/.test(A.names[A.dom[i]]);
   void elbow;
   return {
-    tshirt: { test: (i) => torso(i) || (upperArm(i) && armDist(i, sideOf(i)) < 0.2), off: (i) => (upperArm(i) ? 0.016 : 0.026 + chestPush(i)) + Math.max(0, waist - y(i)) * 0.12 },
-    tank: { test: (i) => torso(i) && !is(i, B.clav.L, B.clav.R), off: () => 0.016 },
-    hoodie: { test: (i) => torso(i) || upperArm(i) || foreArm(i) || (is(i, B.neck) && y(i) < bp(B.neck).y + 0.02), off: (i) => (foreArm(i) ? 0.024 : 0.032) },
-    jacket: { test: (i) => torso(i) || upperArm(i) || foreArm(i), off: () => 0.026 },
+    tshirt: { test: (i) => torso(i) || (upperArm(i) && armDist(i, sideOf(i)) < 0.2), off: (i) => (upperArm(i) ? 0.02 : 0.03 + chestPush(i) + Math.max(0, waist + 0.2 - y(i)) * 0.06) },
+    tank: { test: (i) => torso(i) && !is(i, B.clav.L, B.clav.R), off: (i) => 0.018 + chestPush(i) },
+    hoodie: { test: (i) => above(i, waist - 0.07) || upperArm(i) || foreArm(i) || (is(i, B.neck) && y(i) < bp(B.neck).y + 0.02), off: (i) => (foreArm(i) ? 0.026 : upperArm(i) ? 0.032 : 0.04 + drape(i, 0.22) + Math.max(0, waist + 0.2 - y(i)) * 0.05) },
+    jacket: { test: (i) => above(i, waist - 0.06) || upperArm(i) || foreArm(i), off: (i) => (isArm(i) ? 0.028 : 0.034 + drape(i, 0.25)) },
     jeans: { test: (i) => legs(i) && y(i) > ankle + 0.035, off: (i) => 0.011 + Math.max(0, knee - y(i)) * 0.03 },
     pants: { test: (i) => legs(i) && y(i) > ankle + 0.05, off: () => 0.008 },
     cargo: { test: (i) => legs(i) && y(i) > ankle + 0.06, off: (i) => 0.018 + THREE.MathUtils.smoothstep(waist - y(i), 0, 0.5) * 0.022 },

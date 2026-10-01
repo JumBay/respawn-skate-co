@@ -18,14 +18,18 @@ const game = await mount(null, {
   overlay: true,            // calque fixe plein écran, défilement de la page bloqué pendant le jeu
   shopUrl: '/',
   onEvent(name, data) {},   // ready, runStart, runEnd, tierReached, objectiveUnlocked, dailyDone, shopOpen, exit, destroy
-  rewards: {},              // { bronze: { label } … } : affiché à l'écran de fin, rien n'est créé
+  rewards: {},              // { bronze: { label, code, url } … } : code révélé au palier, copiable
+  tiers: {},                // { bronze: 25000, silver: 60000, gold: 120000 } : seuils des paliers
+  // tryOn: 12              // fiche produit : le shop s'ouvre, ce produit porté
+  // vestiaire: { items }   // page panier : [{ id, size, qty }], doublons dans le sac à dos
+  // remember: false        // « Sortir » ne mémorise pas le choix (hors accueil)
 });
 // « Sortir · Mode boutique » démonte le jeu et mémorise le choix : wasExited() / clearExited()
 // servent au bouton flottant « Rejouer ». Les mêmes événements partent sur window (« respawn:<nom> »).
 ```
 
-Panier : `src/shop-bridge.js` poste le formulaire de fiche WiziShop (`POST /panier.php`, `id_prod`,
-`nb_prod`, `prodVar[1-<attribut>]`) ; hors du domaine de la boutique il est factice et journalise en
+Panier : `src/shop-bridge.js` poste le formulaire de fiche WiziShop comme le thème
+(`POST /panier.php?ajax`, `id_prod`, `nb_prod`, `prodVar[1-<attribut>]`, succès = réponse `1`) ; hors du domaine de la boutique il est factice et journalise en
 console. Défi d'ami : lien `#rs=…` (score, pseudo, look, somme de contrôle) ; carte de partage PNG
 (Web Share sur mobile).
 

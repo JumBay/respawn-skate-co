@@ -1,6 +1,9 @@
 // Pont jeu -> panier WiziShop. Seul contrat utilisé : celui du formulaire de la fiche produit
-// (notes/catalogue.md) — POST /panier.php avec id_prod, nb_prod et, pour un produit à
-// déclinaison, le champ `cart_field` (ex. prodVar[1-2]) valant `variation_id`.
+// (notes/catalogue.md) — POST /panier.php?ajax avec id_prod, nb_prod et, pour un produit à
+// déclinaison, le champ `cart_field` (ex. prodVar[1-2]) valant `variation_id`. C'est l'appel que
+// fait le thème lui-même : la boutique répond « 1 » quand l'article est au panier, un message
+// (rupture, champ manquant) ou une redirection vers la fiche sinon. Sans « ?ajax », un refus
+// redirige vers la fiche en 200 et passerait pour un succès.
 // Aucune autre API du panier n'est supposée : getCartContents() renvoie ce que le JEU a ajouté
 // pendant la visite (journal local), pas le panier réel.
 //
@@ -9,12 +12,12 @@
 import { pickSize } from './data/catalog.js';
 import { load, save } from './core/storage.js';
 
-export function createShopBridge({ catalog, shopUrl = '/', mode } = {}) {
+export function createShopBridge({ catalog, shopUrl = '/', mode, onAdd } = {}) {
   const host = location.hostname;
   const dev = (import.meta.env && import.meta.env.DEV) || /^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(host) || host.endsWith('.local');
   const live = mode ? mode === 'live' : !dev;
   const base = new URL(shopUrl, location.href);
-  const endpoint = new URL('/panier.php', base).href;
+  const endpoint = new URL('/panier.php?ajax', base).href;
   const journal = load('cart-journal', []);
   let queue = Promise.resolve();
 
@@ -30,8 +33,11 @@ export function createShopBridge({ catalog, shopUrl = '/', mode } = {}) {
       await new Promise((r) => setTimeout(r, 250));
       return true;
     }
-    const r = await fetch(endpoint, { method: 'POST', body: fd, credentials: 'same-origin', redirect: 'follow' });
-    return r.ok || r.type === 'opaqueredirect';
+    const r = await fetch(endpoint, { method: 'POST', body: fd, credentials: 'same-origin', redirect: 'follow', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    const text = r.ok ? (await r.text()).trim() : '';
+    if (text === '1') return true;
+    log('refusé', r.status, text.slice(0, 120));
+    return false;
   }
 
   // Ajoute un produit, dans la taille demandée (libellé) ou celle du profil. Les envois sont mis
@@ -56,8 +62,9 @@ export function createShopBridge({ catalog, shopUrl = '/', mode } = {}) {
         if (ok) {
           journal.push({ id: p.id, name: p.name, size: size ? size.label : null, price: p.price_ttc, at: Date.now() });
           save('cart-journal', journal.slice(-50));
+          try { if (onAdd) onAdd({ id: p.id, name: p.name, size: size ? size.label : null, price: p.price_ttc, mock: !live }); } catch (e) { /* rien */ }
         }
-        return { ok, product: p, size: size && size.label, swapped, mock: !live };
+        return { ok, reason: ok ? null : 'refused', product: p, size: size && size.label, swapped, mock: !live };
       } catch (e) {
         return { ok: false, reason: 'network', product: p, error: String(e) };
       }
@@ -78,7 +85,7 @@ export function createShopBridge({ catalog, shopUrl = '/', mode } = {}) {
   }
 
   function getCartContents() { return journal.slice(); }
-  const cartUrl = () => new URL('/panier.php', base).href;
+  const cartUrl = () => new URL('/p/cart.html', base).href;
 
   return { addToCart, addLookToCart, getCartContents, cartUrl, live };
 }

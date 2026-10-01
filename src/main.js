@@ -14,7 +14,7 @@ import { t, getLang, setLang, onLang } from './i18n.js';
 import { h, icon, loadFonts } from './ui/dom.js';
 import { createSpawnScreen } from './ui/spawn.js';
 import { AudioEngine } from './core/audio.js';
-import { OBJECTIVES } from './game/objectives.js';
+import { OBJECTIVES, TIERS } from './game/objectives.js';
 import { Run } from './game/run.js';
 import { createHUD } from './ui/hud.js';
 import { createTouchControls } from './ui/touch.js';
@@ -30,8 +30,16 @@ import { dailyLabel } from './game/run.js';
 export const wasExited = () => !!load('exited', false);
 export const clearExited = () => save('exited', false);
 
+// Options d'intégration (en plus de shopUrl, overlay, onEvent) :
+//  - rewards : { bronze|silver|gold: { label, code } } révélés au palier atteint ;
+//  - tiers : { bronze: 25000, … } seuils des paliers (sinon ceux du jeu) ;
+//  - tryOn : id produit → le jeu s'ouvre sur le shop, ce produit porté (« Essayer sur mon perso ») ;
+//  - vestiaire : { items: [{ id, size, qty }] } → le perso porte le panier, doublons au sac à dos ;
+//  - remember : false = « Sortir » ne mémorise pas le choix (fiche produit, panier).
 export async function mount(el, opts = {}) {
   const shopUrl = opts.shopUrl || '/';
+  if (opts.tiers) for (const tr of TIERS) if (Number(opts.tiers[tr.id]) > 0) tr.score = Number(opts.tiers[tr.id]);
+  const context = opts.vestiaire ? 'vestiaire' : opts.tryOn ? 'tryOn' : 'home';
   // couche plein écran : le jeu crée son propre calque fixe au-dessus de la page et bloque le
   // défilement tant qu'il est monté (rendu à l'identique au démontage)
   let layer = null, prevOverflow = null, api = null, destroyed = false;
@@ -59,7 +67,7 @@ export async function mount(el, opts = {}) {
   const ui = h('div', { class: 'rs-ui' });
 
   const exitToShop = () => {
-    save('exited', true);
+    if (opts.remember !== false && context === 'home') save('exited', true);
     emitOut('exit', {});
     if (opts.onExit) opts.onExit();
     else if (layer) api.destroy();
@@ -85,7 +93,8 @@ export async function mount(el, opts = {}) {
     soundBtn.innerHTML = ''; soundBtn.append(icon(profile.muted ? 'soundOff' : 'soundOn'), h('span', { class: 'rs-chip-label' }, t(profile.muted ? 'sound.off' : 'sound.on')));
     soundBtn.setAttribute('aria-pressed', String(!profile.muted));
     langBtn.textContent = t('lang'); langBtn.setAttribute('aria-label', getLang() === 'fr' ? 'English' : 'Français');
-    shopBtn.innerHTML = ''; shopBtn.append(icon('shop'), h('span', { class: 'rs-chip-label' }, t(opts.onExit || layer ? 'shopmode.exit' : 'shopmode')));
+    const exitKey = context === 'vestiaire' ? 'exit.cart' : context === 'tryOn' ? 'exit.product' : (opts.onExit || layer ? 'shopmode.exit' : 'shopmode');
+    shopBtn.innerHTML = ''; shopBtn.append(icon('shop'), h('span', { class: 'rs-chip-label' }, t(exitKey)));
   }
   renderTop();
 
@@ -129,7 +138,7 @@ export async function mount(el, opts = {}) {
   async function boot() {
     loadbar.style.width = '15%';
     cat = await loadCatalog({ catalog: opts.catalog, catalogUrl: opts.catalogUrl, assetBase });
-    bridge = createShopBridge({ catalog: cat, shopUrl, mode: opts.cartMode });
+    bridge = createShopBridge({ catalog: cat, shopUrl, mode: opts.cartMode, onAdd: (it) => emitOut('cartAdd', it) });
     loadbar.style.width = '35%';
     const canvas = h('canvas', { class: 'rs-canvas', 'aria-hidden': 'true', tabindex: '-1' });
     root.insertBefore(canvas, ui);
@@ -157,6 +166,8 @@ export async function mount(el, opts = {}) {
     if (qs.get('photo')) { title.classList.add('rs-out'); topbar.classList.add('rs-hidden'); applyPhoto(game, qs.get('photo')); return; }
     if (qs.has('skeleton')) game.toggleSkeleton();
     if (state.challenge) press.textContent = t('challenge.from', { name: state.challenge.name, score: fmt(state.challenge.score) });
+    if (context === 'vestiaire') { loadbar.parentElement.classList.add('rs-hidden'); await openVestiaire(opts.vestiaire.items || []); emitOut('ready', { context }); return; }
+    if (context === 'tryOn' && cat.byId.get(Number(opts.tryOn))) { loadbar.parentElement.classList.add('rs-hidden'); await openTryOn(cat.byId.get(Number(opts.tryOn))); emitOut('ready', { context }); return; }
     if (!profile.created || qs.has('spawn')) openSpawn();
     else { press.classList.remove('rs-hidden'); loadbar.parentElement.classList.add('rs-hidden'); waitStart(); }
     emitOut('ready', {});
@@ -367,7 +378,13 @@ export async function mount(el, opts = {}) {
     });
     E.on('tierReached', (e) => {
       hud.pop((fr() ? 'Palier ' : 'Tier ') + e.tier.toUpperCase(), 'rs-acid');
-      emitOut('tierReached', { tier: e.tier, score: e.score, reward: rewardFor(e.tier) });
+      const rw = rewardFor(e.tier);
+      if (rw && rw.code) {
+        const codes = (profile.codes || []).filter((c) => c.code !== rw.code);
+        profile.codes = [...codes, { tier: e.tier, code: rw.code, label: rw.label || '' }]; saveProfile(profile);
+        setTimeout(() => toast(`${t('reward.unlocked')} · ${rw.label ? rw.label + ' · ' : ''}${t('reward.code')} ${rw.code}`, 5200), 700);
+      }
+      emitOut('tierReached', { tier: e.tier, score: e.score, reward: rw });
     });
     E.on('dailyDone', () => { hud.setObjectives(run); hud.pop(t('daily.title') + ' ✓', 'rs-acid'); emitOut('dailyDone', { key: run.daily.key }); });
     E.on('runEnd', (r) => onRunEnd(r));
@@ -378,6 +395,18 @@ export async function mount(el, opts = {}) {
   // Récompenses : points d'accroche seulement. L'intégration peut fournir opts.rewards
   // ({ bronze: { label, code } … }) ; le jeu les affiche, il n'en crée aucune.
   function rewardFor(tier) { return (opts.rewards && opts.rewards[tier]) || null; }
+  // encart d'un code promo : libellé, code sélectionnable, bouton copier (repli : sélection)
+  function rewardBox(tier, rw) {
+    const code = h('code', { class: 'rs-code', tabindex: '0' }, rw.code);
+    const copy = h('button', { class: 'rs-btn rs-btn--ghost rs-btn--small', onClick: async () => {
+      try { await navigator.clipboard.writeText(rw.code); toast(t('reward.copied')); }
+      catch (e) { const r = document.createRange(); r.selectNodeContents(code); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+    } }, t('reward.copy'));
+    return h('div', { class: 'rs-unlock rs-reward' },
+      h('div', {}, `${t('results.tier')} : ${tier.toUpperCase()}${rw.label ? ' · ' + rw.label : ''}`),
+      h('div', { class: 'rs-reward-code' }, code, copy,
+        rw.url ? h('a', { class: 'rs-btn rs-btn--small', href: rw.url, target: '_top' }, t('reward.apply')) : null));
+  }
 
   function onRunEnd(r) {
     if (r.mode !== 'run') return;
@@ -415,7 +444,7 @@ export async function mount(el, opts = {}) {
       lines.push(h('div', { class: 'rs-resline' }, h('span', {}, `vs ${state.challenge.name}`), h('b', {}, `${fmt(state.challenge.score)} ${won ? '— ' + (getLang() === 'en' ? 'beaten!' : 'battu !') : ''}`)));
     }
     const extra = [];
-    if (tier) extra.push(h('div', { class: 'rs-unlock' }, `${t('results.tier')} : ${tier.toUpperCase()}${reward && reward.label ? ' · ' + reward.label : ''}`));
+    if (tier) extra.push(reward && reward.code ? rewardBox(tier, reward) : h('div', { class: 'rs-unlock' }, `${t('results.tier')} : ${tier.toUpperCase()}${reward && reward.label ? ' · ' + reward.label : ''}`));
     if (state.newUnlocks.length) extra.push(h('div', { class: 'rs-unlock' }, `${t('results.unlocked')} : ${state.newUnlocks.map((p) => p.name.split(',')[0]).join(', ')}`));
     if (r.objectives.length) extra.push(h('p', { class: 'rs-hint' }, r.objectives.map((id) => '✓ ' + L[id]).join(' · ')));
     const shareBtn = h('button', { class: 'rs-btn rs-btn--ghost', onClick: async () => {
@@ -448,6 +477,79 @@ export async function mount(el, opts = {}) {
   }
   const shopUrlAbs = () => { const u = new URL(location.href); u.hash = ''; return u.href; };
 
+  // --- « Essayer sur mon perso » : le shop s'ouvre, le produit porté ----------------------------------
+  async function openTryOn(p) {
+    title.classList.add('rs-out');
+    // perso pas encore créé : il prend le genre du produit essayé (non mémorisé comme choix)
+    if (!profile.created && p.gender && p.gender !== 'unisex' && p.gender !== profile.gender) {
+      profile.gender = p.gender; await game.setLook(lookFromProfile(profile, cat));
+    }
+    openShop();
+    state.shopFrom = 'tryOn';
+    if (shopUI) shopUI.select(p);
+  }
+
+  // --- vestiaire (page panier) : le perso porte le panier, les doublons vont au sac à dos -------------
+  async function openVestiaire(items) {
+    title.classList.add('rs-out');
+    state.screen = 'vestiaire';
+    game.mode = 'spawn';
+    game.spawn();
+    const pieces = [];
+    for (const it of items) {
+      const p = cat.byId.get(Number(it.id)); if (!p) continue;
+      const qty = Math.min(Math.max(1, parseInt(it.qty, 10) || 1), 20);
+      const parts = p.slot === 'pack' && p.pack_items.length ? p.pack_items.map((id) => cat.byId.get(id)).filter(Boolean) : [p];
+      for (let k = 0; k < qty; k++) for (const q of parts) pieces.push({ p: q, from: p, size: it.size || null });
+    }
+    const look = lookFromProfile(profile, cat);
+    const worn = [], bag = [], used = new Set();
+    for (const x of pieces) {
+      const s = x.p.slot;
+      if (s && !used.has(s) && (s in look.outfit || s in look.board)) { used.add(s); worn.push(x); if (s in look.outfit) look.outfit[s] = x.p; else look.board[s] = x.p; }
+      else bag.push(x);
+    }
+    look.backpack = bag.length > 0;
+    await game.setLook(look);
+    const pack = game.skater && game.skater.props && game.skater.props.pack;
+    if (pack) pack.scale.setScalar(1 + Math.min(Math.max(bag.length - 1, 0), 6) * 0.09);
+    // la taille d'un look vaut pour le look entier : elle ne s'affiche que sur une pièce vendue seule
+    const nm = (p) => p.name.split(/[,:]/)[0].trim();
+    const line = (x) => h('li', {}, h('b', {}, nm(x.p)), x.size && x.from === x.p ? ` · ${x.size}` : '', x.from !== x.p ? h('span', { class: 'rs-hint' }, ` · ${nm(x.from)}`) : '');
+    const back = h('button', { class: 'rs-btn rs-btn--acid', onClick: () => exitToShop() }, t('exit.cart'));
+    const panel = h('div', { class: 'rs-panel', role: 'dialog', 'aria-label': t('vest.title') },
+      h('div', { class: 'rs-panel-head' }, h('h2', {}, t('vest.title')), h('p', {}, t('vest.text'))),
+      h('div', { class: 'rs-tabbody' },
+        pieces.length ? null : h('p', {}, t('vest.empty')),
+        worn.length ? h('span', { class: 'rs-label' }, t('vest.worn')) : null,
+        worn.length ? h('ul', { class: 'rs-vlist' }, worn.map(line)) : null,
+        bag.length
+          ? h('details', { class: 'rs-bag', onToggle: (e) => { state.bagOpen = e.target.open; } }, h('summary', {}, `${t('vest.bag')} · ${bag.length}`), h('ul', { class: 'rs-vlist' }, bag.map(line)))
+          : (pieces.length ? h('p', { class: 'rs-hint' }, t('vest.bagEmpty')) : null)),
+      h('div', { class: 'rs-detail' }, h('div', { class: 'rs-actions' }, back)));
+    ui.appendChild(h('section', { class: 'rs-shop rs-vest' }, h('div', { class: 'rs-shop-stage' }), panel));
+    // caméra : le perso tourne ; sac ouvert, elle se place dans son dos
+    showcaseCamera(0.95);
+    const turn = game.cameraOverride;
+    game.cameraOverride = (cam, dt) => {
+      turn(cam, dt);
+      if (state.bagOpen && pack && pack.visible) {
+        // dans l'axe centre du perso -> sac, à 2,6 m : le sac à dos face à la caméra
+        // devant -> dos : de l'imprimé de poitrine au sac, tous deux fixés au buste
+        const chest = game.skater.props.print;
+        const w = pack.getWorldPosition(new THREE.Vector3());
+        const p = chest ? chest.getWorldPosition(new THREE.Vector3()) : game.ctrl.pos;
+        const d = new THREE.Vector3(w.x - p.x, 0, w.z - p.z);
+        if (d.lengthSq() < 1e-4) d.set(0, 0, -1);
+        d.normalize();
+        cam.position.set(w.x + d.x * 2.4, w.y + 0.3, w.z + d.z * 2.4);
+        cam.lookAt(w.x, w.y - 0.1, w.z);
+      }
+    };
+    setTimeout(() => back.focus(), 50);
+    emitOut('vestiaire', { worn: worn.map((x) => x.p.id), bag: bag.map((x) => x.p.id) });
+  }
+
   // --- modales : pause, commandes, résultats ---------------------------------------------------------
   function openModal(titleText, ...content) {
     closeModal();
@@ -474,7 +576,8 @@ export async function mount(el, opts = {}) {
       h('button', { class: 'rs-btn rs-btn--pink', onClick: () => { window.removeEventListener('keydown', onKey); game.paused = false; openShop(); } }, t('pause.shop')),
       h('button', { class: 'rs-btn', onClick: () => { window.removeEventListener('keydown', onKey); game.paused = false; openSpawn(); } }, t('pause.spawn')),
       h('button', { class: 'rs-btn rs-btn--ghost', onClick: () => controls() }, t('pause.controls')),
-      h('p', { class: 'rs-hint' }, `${t('daily.title')} : ${dailyLabel(run.daily, getLang())}`)));
+      h('p', { class: 'rs-hint' }, `${t('daily.title')} : ${dailyLabel(run.daily, getLang())}`),
+      (profile.codes || []).length ? h('p', { class: 'rs-hint' }, `${t('reward.yours')} : ${profile.codes.map((c) => `${c.code}${c.label ? ' (' + c.label + ')' : ''}`).join(' · ')}`) : null));
     function controls() {
       const K = (k, d) => [h('span', {}, ...k.map((x) => h('kbd', {}, x))), h('span', {}, d)];
       const fr = getLang() !== 'en';
@@ -520,6 +623,7 @@ export async function mount(el, opts = {}) {
     shopUI.el.remove(); shopUI = null;
     game.cameraOverride = null;
     if (silent) return;
+    if (state.shopFrom === 'tryOn') { state.shopFrom = 'play'; if (!profile.created) openSpawn(); else { audio.unlock(); audio.setMusic(profile.music !== false); play(); } return; }
     if (state.shopFrom === 'results' || (run && run.ended)) { play('run'); return; }
     state.screen = 'play'; game.mode = 'play'; showHUD(true); game.snapCamera(); input.clearEdges();
   }

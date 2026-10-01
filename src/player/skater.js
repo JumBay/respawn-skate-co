@@ -609,8 +609,9 @@ export class Skater {
       }
     };
     const head = o.head, g = head && head.gabarit;
-    show('cap', g === 'cap', head);
-    show('beanie', g === 'beanie', head);
+    // sous un casque, casquette et bonnet sont retirés (ils restent dans la tenue)
+    show('cap', g === 'cap' && !o.helmet, head);
+    show('beanie', g === 'beanie' && !o.helmet, head);
     show('helmet', !!o.helmet, o.helmet);
     if (this.props.shoeL) { this.props.shoeL.visible = true; this.props.shoeR.visible = true; }
     // sous un couvre-chef, les cheveux longs restent mais les coiffures hautes sont masquées

@@ -237,3 +237,15 @@
 .rs-fallback { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px;
   background: linear-gradient(180deg, #2a1b5c 0%, #8d3f8f 55%, #ff9a52 100%); }
 .rs-fallback p { max-width: 42ch; margin: 1em auto; font-weight: 600; }
+
+/* --- intégration boutique : codes promo, vestiaire du panier ---------------------------------- */
+.rs-reward-code { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; }
+.rs-code { font-family: var(--display); font-size: 18px; letter-spacing: .06em; padding: 6px 10px; border-radius: 8px;
+  background: var(--ink); color: var(--acid); border: 2px dashed var(--acid); user-select: all; -webkit-user-select: all; }
+.rs-btn--small { padding: .45em .9em !important; font-size: 13px !important; }
+.rs-vlist { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 6px; }
+.rs-vlist li { padding: 8px 10px; border-radius: 10px; background: rgba(243,240,232,.08); font-size: 14px; line-height: 1.35; }
+.rs-bag { margin-top: 4px; border: 2px solid var(--acid); border-radius: 12px; padding: 8px 10px; background: rgba(200,255,46,.08); }
+.rs-bag summary { cursor: pointer; font-family: var(--display); font-size: 15px; color: var(--acid); padding: 4px 2px; min-height: 32px; }
+.rs-bag[open] summary { margin-bottom: 8px; }
+.rs-vest .rs-shop-stage { pointer-events: none; }

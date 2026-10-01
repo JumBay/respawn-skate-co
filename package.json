@@ -1,0 +1,26 @@
+{
+  "name": "respawn-skate-co-game",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Respawn Skate Co. : jeu de skate 3D arcade pour la boutique WiziShop de démonstration.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "node scripts/sync-catalog.mjs && vite build",
+    "preview": "vite preview --host",
+    "models": "node scripts/build-models.mjs"
+  },
+  "dependencies": {
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@gltf-transform/cli": "^4.5.1",
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
+    "meshoptimizer": "^1.3.0",
+    "sharp": "^0.35.5",
+    "vite": "^8.3.2"
+  }
+}

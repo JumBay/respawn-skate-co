@@ -1,0 +1,28 @@
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
+const params = new URLSearchParams(location.search);
+const gender = params.get('g') || 'women';
+const kind = params.get('k') || 'Body';
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(innerWidth, innerHeight); document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#556');
+scene.add(new THREE.HemisphereLight('#fff', '#445', 2.5));
+const cam = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.1, 100);
+const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
+const gltf = await loader.loadAsync('/models/' + gender + '.glb');
+const isPartF = (o) => o.parent && o.parent.name === 'RootNode' && (o.isMesh || o.isGroup);
+const names = []; gltf.scene.traverse(o => { if (isPartF(o) && o.name.includes(kind)) names.push(o.name); });
+names.forEach((nm, i) => {
+  const c = SkeletonUtils.clone(gltf.scene);
+  const parts = []; c.traverse(o => { if (isPartF(o)) parts.push(o); });
+  const want = params.get('with') ? params.get('with').split(',') : [];
+  for (const o of parts) o.visible = o.name === nm || want.includes(o.name);
+  c.position.x = (i - (names.length - 1) / 2) * 0.8; c.rotation.y = params.get('back') ? Math.PI : 0;
+  scene.add(c);
+  const d = document.createElement('div'); d.textContent = nm; d.style.cssText = `position:fixed;top:8px;left:${(i + 0.2) / names.length * 100}%;color:#fff;font:12px sans-serif`; document.body.appendChild(d);
+});
+const w = names.length * 0.8;
+cam.position.set(0, kind === 'Head' ? 1.6 : 1.0, kind === 'Head' ? w * 1.1 : w * 1.6 + 0.5); cam.lookAt(0, kind === 'Head' ? 1.6 : 0.9, 0);
+r.render(scene, cam);
+window.__info = names; window.__gltf = gltf;

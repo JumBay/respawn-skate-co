@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Respawn Skate Co. — le jeu</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #141416; }
+    #respawn { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="respawn"></div>
+  <script type="module">
+    import { mount } from './src/main.js';
+    mount(document.getElementById('respawn'), { shopUrl: '/', debug: new URLSearchParams(location.search).has('debug') });
+  </script>
+</body>
+</html>

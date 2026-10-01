@@ -49,8 +49,12 @@ export function createEnvironment(scene, quality, { assetBase, renderer }) {
       // equirect de three : u = atan2(z, x) / 2PI + 0.5, v = asin(y) / PI + 0.5 (v vers le haut)
       const phi = (bx / width - 0.5) * Math.PI * 2;
       const lat = (0.5 - by / height) * Math.PI;
-      const d = new THREE.Vector3(Math.cos(phi) * Math.cos(lat), Math.sin(lat), Math.sin(phi) * Math.cos(lat));
-      d.applyAxisAngle(new THREE.Vector3(0, 1, 0), -rotY);
+      // on tourne le ciel pour placer le couchant au nord-ouest (face au spawn, en contre-jour doux)
+      const want = Math.atan2(-0.75, -0.66); // azimut voulu (z, x)
+      const rot = phi - want;
+      scene.backgroundRotation.set(0, rot, 0);
+      scene.environmentRotation.set(0, rot, 0);
+      const d = new THREE.Vector3(Math.cos(want) * Math.cos(lat), Math.sin(lat), Math.sin(want) * Math.cos(lat));
       // soleil relevé (~32°) : des ombres franches et lisibles, la couleur reste celle du couchant
       d.y = Math.max(d.y, 0.62);
       sunDir.copy(d.normalize());

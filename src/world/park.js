@@ -91,7 +91,7 @@ export function createPark({ quality, bank }) {
   const S = (o) => new THREE.MeshStandardMaterial(o);
   const P = (name, o) => bank.pbr(name, o);
   const M = {
-    ground: P('ground', { color: '#d8d6da', scale: 0.25 }),
+    ground: P('ground', { color: '#d8d6da', scale: 0.25, breakup: 0.22 }),
     concrete: P('smooth', { color: '#c9c6c4', scale: 0.33 }),
     concreteDark: P('wall', { color: '#8d8a90', scale: 0.33 }),
     ramp: P('smooth', { color: '#d4d2d0', scale: 0.3, roughness: 0.85 }),
@@ -397,6 +397,14 @@ export function createPark({ quality, bank }) {
       g.addColorStop(0, 'rgba(20,16,18,0.3)'); g.addColorStop(1, 'rgba(20,16,18,0)');
       ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, r, r * (0.5 + R() * 0.5), R() * 3, 0, 7); ctx.fill();
     }
+    // flaques sèches : auréole claire, centre plus sombre et poussiéreux
+    for (let i = 0; i < 26; i++) {
+      const x = R() * SZ, y = R() * SZ, r = (0.8 + R() * 2.2) * k;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(R() * 3); ctx.scale(1, 0.5 + R() * 0.4);
+      const g1 = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r);
+      g1.addColorStop(0, 'rgba(60,50,48,0.16)'); g1.addColorStop(0.75, 'rgba(60,50,48,0.10)'); g1.addColorStop(0.92, 'rgba(235,225,210,0.22)'); g1.addColorStop(1, 'rgba(235,225,210,0)');
+      ctx.fillStyle = g1; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill(); ctx.restore();
+    }
     // bandes peintes usées
     ctx.lineWidth = 0.18 * k; ctx.strokeStyle = 'rgba(232,186,40,0.75)'; ctx.setLineDash([1.6 * k, 1.1 * k]);
     let [ax, ay] = toPx(-18, 26), [bx, by] = toPx(-18, -24);
@@ -553,22 +561,89 @@ export function createPark({ quality, bank }) {
     m.rotation.x = -Math.PI / 2; m.position.set(spawn.x, 0.015, spawn.z); group.add(m);
   }
 
-  // --- Lampadaires (têtes lumineuses, halo doux au sol) -------------------------------------------------
-  const glowMat = new THREE.MeshBasicMaterial({ map: glowTexture('#ffcf8a'), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.22 });
-  const lampHeadMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffe2b0').multiplyScalar(1.8), toneMapped: false });
-  const lampSpots = [[-14.5, 9], [7, -6], [14, 10], [-14, -6], [-20, 20], [-30, 12], [10, -26], [-20, -28], [30, 8], [32, -24], [6, 30], [-26, 30], [30, 28], [-33, -24]];
-  const codeLamps = [];
+  // --- Mâts d'éclairage de skatepark (projecteurs LED orientés vers le park) ---------------------------
+  const glowMat = new THREE.MeshBasicMaterial({ map: glowTexture('#fff1d6'), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.16 });
+  const ledMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff4e0').multiplyScalar(2.4), toneMapped: false });
+  const housingMat = S({ color: '#2b2e33', roughness: 0.45, metalness: 0.8 });
+  const lampSpots = [[-34.3, -30.3], [34.3, -30.3], [-34.3, 30.3], [34.3, 30.3], [-34.3, 0], [34.3, 4], [0, 30.3], [-6, -30.3]];
+  let spotBudget = hi ? 4 : 0;
   for (const [x, z] of lampSpots) {
-    const hgt = 6.2;
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.14, hgt, 8), M.pole);
+    const hgt = 9.5;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.17, hgt, 12), M.pole);
     pole.position.set(x, hgt / 2, z); pole.castShadow = hi; group.add(pole);
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 0.08), M.pole); arm.position.set(x + 0.6, hgt - 0.1, z); group.add(arm);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.14, 0.32), lampHeadMat); head.position.set(x + 1.2, hgt - 0.2, z); group.add(head);
-    codeLamps.push(pole, arm, head);
-    const glow = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), glowMat);
-    glow.rotation.x = -Math.PI / 2; glow.position.set(x + 1.2, terrain.height(x + 1.2, z) + 0.03, z); group.add(glow);
-    obstacles.push({ x, z, r: 0.22, kind: 'pole' });
-    ao(x - 0.1, x + 0.1, z - 0.1, z + 0.1, 0.35);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.35, 12), M.concrete);
+    base.position.set(x, 0.17, z); group.add(base);
+    // tête : traverse + 3 projecteurs inclinés vers le centre du park
+    const head = new THREE.Group();
+    head.position.set(x, hgt, z);
+    head.lookAt(0, hgt, 0);
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 0.08), M.pole); head.add(bar);
+    for (const dx of [-0.55, 0, 0.55]) {
+      const f = new THREE.Group();
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.1, 0.32), housingMat);
+      const led = new THREE.Mesh(new THREE.PlaneGeometry(0.38, 0.26), ledMat);
+      led.rotation.x = Math.PI / 2; led.position.y = -0.051;
+      f.add(box, led); f.position.set(dx, -0.12, 0.12); f.rotation.x = 0.55;
+      head.add(f);
+    }
+    group.add(head);
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), glowMat);
+    const gx = x * 0.78, gz = z * 0.78;
+    glow.rotation.x = -Math.PI / 2; glow.position.set(gx, terrain.height(gx, gz) + 0.03, gz); group.add(glow);
+    if (spotBudget-- > 0) {
+      const L = new THREE.SpotLight('#fff0dc', 160, 45, 0.7, 0.6, 1.6);
+      L.position.set(x, hgt - 0.3, z); L.target.position.set(x * 0.55, 0, z * 0.55);
+      group.add(L); group.add(L.target);
+    }
+    obstacles.push({ x, z, r: 0.3, kind: 'pole' });
+    ao(x - 0.2, x + 0.2, z - 0.2, z + 0.2, 0.5);
+  }
+  const codeLamps = [];
+
+  // --- Herbe dans les joints et au pied des murs, flaques sèches -------------------------------------
+  {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 128;
+    const ctx = c.getContext('2d');
+    for (let i = 0; i < 70; i++) {
+      const x = 8 + R() * 112, h = 40 + R() * 80, lean = (R() - 0.5) * 30;
+      const g = 90 + R() * 70;
+      ctx.strokeStyle = `rgb(${Math.round(g * 0.55)},${Math.round(g)},${Math.round(g * 0.35)})`;
+      ctx.lineWidth = 1.5 + R() * 2;
+      ctx.beginPath(); ctx.moveTo(x, 128); ctx.quadraticCurveTo(x + lean * 0.3, 128 - h * 0.6, x + lean, 128 - h); ctx.stroke();
+    }
+    const tex = canvasTexture(c);
+    const gm = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.9 });
+    const tuft = new THREE.PlaneGeometry(0.5, 0.28); tuft.translate(0, 0.14, 0);
+    const cross = tuft.clone(); cross.rotateY(Math.PI / 2);
+    const geo = new THREE.BufferGeometry();
+    const merge = (a, b) => { const pa = a.attributes, pb = b.attributes; const out = new THREE.BufferGeometry(); for (const k of ['position', 'normal', 'uv']) { const arr = new Float32Array(pa[k].array.length + pb[k].array.length); arr.set(pa[k].array); arr.set(pb[k].array, pa[k].array.length); out.setAttribute(k, new THREE.BufferAttribute(arr, pa[k].itemSize)); } const ia = a.index.array, ib = b.index.array; const idx = new Uint16Array(ia.length + ib.length); idx.set(ia); for (let i = 0; i < ib.length; i++) idx[ia.length + i] = ib[i] + pa.position.count; out.setIndex(new THREE.BufferAttribute(idx, 1)); return out; };
+    void geo;
+    const tuftGeo = merge(tuft, cross);
+    const spots = [];
+    // le long des murs d'enceinte
+    for (let i = 0; i < 260; i++) {
+      const side = (R() * 4) | 0, t = R();
+      let x, z;
+      if (side === 0) { x = B.x0 + t * (B.x1 - B.x0); z = B.z0 + 0.35 + R() * 0.3; }
+      else if (side === 1) { x = B.x0 + t * (B.x1 - B.x0); z = B.z1 - 0.35 - R() * 0.3; }
+      else if (side === 2) { z = B.z0 + t * (B.z1 - B.z0); x = B.x0 + 0.35 + R() * 0.3; }
+      else { z = B.z0 + t * (B.z1 - B.z0); x = B.x1 - 0.35 - R() * 0.3; }
+      if (terrain.height(x, z) > 0.02) continue;
+      spots.push([x, z, 0.6 + R() * 0.9]);
+    }
+    // quelques touffes dans les joints, près des bords
+    for (let i = 0; i < 70; i++) {
+      const onX = R() < 0.5;
+      const x = onX ? B.x0 + 4 * (1 + ((R() * 17) | 0)) : B.x0 + R() * (B.x1 - B.x0);
+      const z = onX ? B.z0 + R() * (B.z1 - B.z0) : B.z0 + 4 * (1 + ((R() * 15) | 0));
+      if (Math.abs(x) < 26 && Math.abs(z) < 24) continue;
+      if (terrain.height(x, z) > 0.02 || terrain.height(x, z) < -0.02) continue;
+      spots.push([x, z, 0.35 + R() * 0.4]);
+    }
+    const inst = new THREE.InstancedMesh(tuftGeo, gm, spots.length);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), pp = new THREE.Vector3();
+    spots.forEach(([x, z, k], i) => { pp.set(x, 0, z); q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), R() * 3); sc.set(k, k * (0.8 + R() * 0.5), k); m4.compose(pp, q, sc); inst.setMatrixAt(i, m4); });
+    group.add(inst);
   }
 
   // --- Cônes renversables, barrières, poubelles ----------------------------------------------------------
@@ -704,14 +779,7 @@ export function createPark({ quality, bank }) {
       group.add(o);
       return o;
     };
-    if (byName.street_lamp_01) {
-      for (const m of codeLamps) m.visible = false;
-      for (const [x, z] of lampSpots) {
-        place('street_lamp_01', x, z, 0, 1.5);
-        const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 8), lampHeadMat);
-        head.position.set(x, terrain.height(x, z) + 3.6 * 1.5, z); group.add(head);
-      }
-    }
+    void codeLamps;
     for (const o of obstacles) {
       if (o.kind === 'bin') place('metal_trash_can', o.x, o.z, o.x * 0.7, 1, (c) => !/rust/.test(c.name) && !/rust/.test(c.parent && c.parent.name));
       if (o.kind === 'barrier') place('concrete_road_barrier', o.x, o.z, o.rot, 1.15);

@@ -28,7 +28,7 @@ const MATERIALS = {
   suede: 'scuba_suede',
 };
 const HDRI = 'sunset_jhbcentral';
-const PROPS = ['street_lamp_01', 'concrete_road_barrier', 'metal_trash_can', 'utility_box_01',
+const PROPS = ['concrete_road_barrier', 'metal_trash_can', 'utility_box_01',
   'old_tyre', 'spray_paint_bottles_02', 'modular_street_seating', 'wooden_picnic_table', 'trashbag'];
 
 async function api(id) {

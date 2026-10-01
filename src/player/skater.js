@@ -485,7 +485,7 @@ export class Skater {
     const printMat = new THREE.MeshStandardMaterial({ transparent: true, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -4 });
     const print = new THREE.Mesh(new THREE.PlaneGeometry(0.19, 0.19), printMat);
     this.printMat = printMat;
-    this.props.print = fix(print, B.spine[2], new THREE.Vector3(cx, cy - 0.03, chestZ + 0.02));
+    this.props.print = fix(print, B.spine[2], new THREE.Vector3(cx, cy - 0.05, chestZ + 0.05));
     // sac à dos (panier vestiaire)
     const pack = new THREE.Group();
     const bag = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.36, 0.14), new THREE.MeshPhysicalMaterial({ color: '#1d1f24', roughness: 0.8, sheen: 0.4 }));

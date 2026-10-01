@@ -9,7 +9,7 @@
     "dev": "vite --host",
     "build": "node scripts/sync-catalog.mjs && vite build",
     "preview": "vite preview --host",
-    "models": "node scripts/build-models.mjs"
+    "models": "node scripts/build-ubc.mjs"
   },
   "dependencies": {
     "three": "0.186.1"

@@ -19797,41 +19797,44 @@ function Nm(e, t) {
 		Z.body,
 		Z.thigh.L,
 		Z.thigh.R
-	], p = (t, n) => s(t, ...f) && c(t) > n && c(t) < e.shoulderY + .12, m = (e) => p(e, r - .05), h = -1, g = 0;
-	for (let n = 0; n < t.dom.length; n++) !s(n, ...Z.spine) || c(n) < r + .12 || c(n) > e.shoulderY || Math.abs(t.model[n * 3]) < .12 && t.model[n * 3 + 2] > h && (h = t.model[n * 3 + 2], g = c(n));
-	let _ = (e, n = .3) => {
+	], p = (t, n) => s(t, ...f) && c(t) > n && c(t) < e.shoulderY + .12, m = (e) => {
+		let n = Math.abs(t.model[e * 3]);
+		return t.model[e * 3 + 2] > 0 ? .1 * (1 - Ge.smoothstep(n, .04, .15)) : 0;
+	}, h = (e) => p(e, r - .05 + m(e)), g = -1, _ = 0;
+	for (let n = 0; n < t.dom.length; n++) !s(n, ...Z.spine) || c(n) < r + .12 || c(n) > e.shoulderY || Math.abs(t.model[n * 3]) < .12 && t.model[n * 3 + 2] > g && (g = t.model[n * 3 + 2], _ = c(n));
+	let v = (e, n = .3) => {
 		let i = t.sn[e * 3 + 2];
-		if (i < .5 || c(e) > g || c(e) < r - .12 || Math.abs(t.model[e * 3]) > .13) return 0;
-		let a = h - (g - c(e)) * n, o = 1 - Ge.smoothstep(Math.abs(t.model[e * 3]), .07, .13), s = Ge.smoothstep(c(e), r + .02, r + .2);
-		return Math.min(.045, Math.max(0, a - t.model[e * 3 + 2]) / i) * o * s;
-	}, v = (e) => _(e), y = (e) => s(e, Z.uarm.L, Z.uarm.R), b = (e) => s(e, Z.farm.L, Z.farm.R), x = (e) => s(e, Z.body, Z.spine[0]) && c(e) < r + .05 || s(e, Z.thigh.L, Z.thigh.R, Z.calf.L, Z.calf.R), S = (e) => /^(foot|ball)/.test(t.names[t.dom[e]]);
+		if (i < .5 || c(e) > _ || c(e) < r - .12 || Math.abs(t.model[e * 3]) > .13) return 0;
+		let a = g - (_ - c(e)) * n, o = 1 - Ge.smoothstep(Math.abs(t.model[e * 3]), .07, .13), s = Ge.smoothstep(c(e), r + .02, r + .2);
+		return Math.min(.03, Math.max(0, a - t.model[e * 3 + 2]) / i) * o * s;
+	}, y = (e) => v(e), b = (e) => s(e, Z.uarm.L, Z.uarm.R), x = (e) => s(e, Z.farm.L, Z.farm.R), S = (e) => s(e, Z.body, Z.spine[0]) && c(e) < r + .05 || s(e, Z.thigh.L, Z.thigh.R, Z.calf.L, Z.calf.R), C = (e) => /^(foot|ball)/.test(t.names[t.dom[e]]);
 	return {
 		tshirt: {
 			rigid: Mm,
-			test: (e) => m(e) || y(e) && l(e, u(e)) < .2,
-			off: (e) => y(e) ? .02 : .03 + v(e) + Math.max(0, r + .2 - c(e)) * .06
+			test: (e) => h(e) || b(e) && l(e, u(e)) < .2,
+			off: (e) => b(e) ? .02 : .03 + y(e) + Math.max(0, r + .2 - c(e)) * .06
 		},
 		tank: {
 			rigid: Mm,
-			test: (e) => m(e) && !s(e, Z.clav.L, Z.clav.R),
-			off: (e) => .018 + v(e)
+			test: (e) => h(e) && !s(e, Z.clav.L, Z.clav.R),
+			off: (e) => .018 + y(e)
 		},
 		hoodie: {
 			rigid: Mm,
-			test: (e) => p(e, r - .07) || y(e) || b(e) || s(e, Z.neck) && c(e) < n(Z.neck).y + .02,
-			off: (e) => b(e) ? .026 : y(e) ? .032 : .04 + _(e, .22) + Math.max(0, r + .2 - c(e)) * .05
+			test: (e) => p(e, r - .07) || b(e) || x(e) || s(e, Z.neck) && c(e) < n(Z.neck).y + .02,
+			off: (e) => x(e) ? .026 : b(e) ? .032 : .04 + v(e, .22) + Math.max(0, r + .2 - c(e)) * .05
 		},
 		jacket: {
 			rigid: Mm,
-			test: (e) => p(e, r - .06) || y(e) || b(e),
-			off: (e) => d(e) ? .028 : .034 + _(e, .25)
+			test: (e) => p(e, r - .06) || b(e) || x(e),
+			off: (e) => d(e) ? .028 : .034 + v(e, .25)
 		},
 		jeans: {
 			rigid: {
 				...Mm,
 				minY: r - .09
 			},
-			test: (e) => x(e) && c(e) > a + .035,
+			test: (e) => S(e) && c(e) > a + .035,
 			off: (e) => .011 + Math.max(0, i - c(e)) * .03
 		},
 		pants: {
@@ -19839,7 +19842,7 @@ function Nm(e, t) {
 				...Mm,
 				minY: r - .09
 			},
-			test: (e) => x(e) && c(e) > a + .05,
+			test: (e) => S(e) && c(e) > a + .05,
 			off: () => .008
 		},
 		cargo: {
@@ -19847,7 +19850,7 @@ function Nm(e, t) {
 				...Mm,
 				minY: r - .09
 			},
-			test: (e) => x(e) && c(e) > a + .06,
+			test: (e) => S(e) && c(e) > a + .06,
 			off: (e) => .018 + Ge.smoothstep(r - c(e), 0, .5) * .022
 		},
 		shorts: {
@@ -19855,15 +19858,15 @@ function Nm(e, t) {
 				...Mm,
 				minY: r - .09
 			},
-			test: (e) => x(e) && c(e) > i + .06,
+			test: (e) => S(e) && c(e) > i + .06,
 			off: (e) => .016 + Ge.smoothstep(r - c(e), 0, .35) * .02
 		},
 		sneakers_low: {
-			test: (e) => S(e) || s(e, Z.calf.L, Z.calf.R) && c(e) < a + .03,
+			test: (e) => C(e) || s(e, Z.calf.L, Z.calf.R) && c(e) < a + .03,
 			off: (e) => (/^ball/.test(t.names[t.dom[e]]) ? .024 : .016) + (t.mn[e * 3 + 1] < -.4 ? .01 : 0)
 		},
 		sneakers_high: {
-			test: (e) => S(e) || s(e, Z.calf.L, Z.calf.R) && c(e) < a + .13,
+			test: (e) => C(e) || s(e, Z.calf.L, Z.calf.R) && c(e) < a + .13,
 			off: (e) => (/^ball/.test(t.names[t.dom[e]]) ? .024 : .018) + (t.mn[e * 3 + 1] < -.4 ? .01 : 0)
 		},
 		socks: {
@@ -20157,9 +20160,10 @@ var Fm = class {
 			transparent: !0,
 			roughness: .9,
 			polygonOffset: !0,
-			polygonOffsetFactor: -4
-		}), A = new Y(new lo(.19, .19), k);
-		this.printMat = k, this.props.print = r(A, Z.spine[2], new G(s, c - .05, o + .05));
+			polygonOffsetFactor: -60,
+			polygonOffsetUnits: -60
+		}), A = new Y(new lo(.15, .15), k);
+		this.printMat = k, this.props.print = r(A, Z.spine[2], new G(s, c, o + .034));
 		let j = new Ht(), ee = new Y(new Hi(.28, .36, .14), new Oo({
 			color: "#1d1f24",
 			roughness: .8,

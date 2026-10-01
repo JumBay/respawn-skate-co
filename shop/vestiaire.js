@@ -5,9 +5,11 @@
 (function () {
   // servi par jsDelivr depuis le même commit que le jeu : le bundle et le catalogue se déduisent de l'adresse de ce fichier
   var SELF = (document.currentScript && document.currentScript.src) || '';
-  var BUNDLE = SELF.replace(/\/shop\/vestiaire\.js.*$/, '/dist/respawn.js');
+  var BASE = SELF.replace(/\/shop\/vestiaire\.js.*$/, '');
+  // le jeu retenu est le 2D (Respawn Street Run) ; le 3D (dist/respawn.js) n'est plus chargé
+  var BUNDLE = BASE + '/dist/respawn-2d.js';
   // le catalogue du jeu (même commit que le bundle), chargé sur la page panier seulement
-  var CATALOG = BUNDLE.replace('/dist/respawn.js', '/public/catalog.json');
+  var CATALOG = BASE + '/public/catalog.json';
   var CAT = {}, BYID = {};
   var d = document;
   var CSS = '.rsx-vest{margin:24px 0 8px;padding:20px;background:#141416;color:#f3f0e8;font-family:"Space Grotesk",system-ui,sans-serif;clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px))}\n.rsx-vest__kicker{margin:0;font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#c8ff2e}\n.rsx-vest__title{margin:6px 0 4px;font-family:Anton,Impact,sans-serif;font-weight:400;font-size:clamp(24px,3vw,32px);line-height:1.05;text-transform:uppercase;color:#f3f0e8}\n.rsx-vest__text{margin:0 0 14px;font-size:14px;line-height:1.45;color:#b9b5ab}\n.rsx-vest__fig{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px;padding:0;list-style:none}\n.rsx-vest__fig li{position:relative;width:64px;height:64px;background:#2a2a2e;border:2px solid #2a2a2e}\n.rsx-vest__fig img{width:100%;height:100%;object-fit:cover;display:block}\n.rsx-vest__fig b{position:absolute;left:0;right:0;bottom:0;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:rgba(20,20,22,.82);color:#c8ff2e;text-align:center;line-height:16px}\n.rsx-vest__bag{margin:0 0 14px;border:2px solid #c8ff2e;padding:8px 12px}\n.rsx-vest__bag summary{cursor:pointer;font-weight:700;color:#c8ff2e;min-height:28px;display:flex;align-items:center;gap:8px}\n.rsx-vest__bag ul{margin:8px 0 0;padding-left:18px;font-size:14px;line-height:1.5}\n.rsx-vest .rs-btn{cursor:pointer;width:100%}\n.rsx-vest .rs-btn svg{width:20px;height:20px;flex:none}\n.rsx-vest__note{margin:10px 0 0;font-size:12px;color:#b9b5ab}\n';
@@ -82,7 +84,7 @@
       (r.bag.length ? ', le reste dans son sac à dos.' : '.') + '</p>' +
       (fig ? '<ul class="rsx-vest__fig">' + fig + '</ul>' : '') + bag +
       '<button type="button" class="rs-btn" aria-haspopup="dialog"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.6"/><path d="M8 21l1.4-7.5L7 11l3-3h4l3 3-2.4 2.5L16 21"/><path d="M4 22h16"/></svg><span>Voir mon skater en tenue</span></button>' +
-      '<p class="rsx-vest__note">La 3D ne se charge qu’à ta demande. Ton panier ci-dessus reste le seul qui compte.</p>';
+      '<p class="rsx-vest__note">Le jeu ne se charge qu’à ta demande. Ton panier ci-dessus reste le seul qui compte.</p>';
     if (!old) detail.parentNode.insertBefore(box, detail.nextSibling);
     var btn = box.querySelector('button');
     btn.addEventListener('pointerenter', function () { try { var l = d.createElement('link'); l.rel = 'modulepreload'; l.href = BUNDLE; l.crossOrigin = 'anonymous'; d.head.appendChild(l); } catch (e) {} }, { once: true });

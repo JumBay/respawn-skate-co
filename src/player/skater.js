@@ -235,7 +235,7 @@ function garmentZones(rig, A) {
     // fondu vers les côtés pour ne pas créer de marche
     const side = 1 - THREE.MathUtils.smoothstep(Math.abs(A.model[i * 3]), 0.07, 0.13);
     const low = THREE.MathUtils.smoothstep(y(i), waist + 0.02, waist + 0.2);
-    return Math.min(0.045, Math.max(0, target - A.model[i * 3 + 2]) / nz) * side * low;
+    return Math.min(0.03, Math.max(0, target - A.model[i * 3 + 2]) / nz) * side * low;
   };
   const chestPush = (i) => drape(i);
   const upperArm = (i) => is(i, B.uarm.L, B.uarm.R);
@@ -584,10 +584,10 @@ export class Skater {
       this.props['shoe' + sd] = fix(shoe, B.foot[sd], new THREE.Vector3(cx, y0, cz));
     }
     // imprimé de poitrine
-    const printMat = new THREE.MeshStandardMaterial({ transparent: true, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -4 });
-    const print = new THREE.Mesh(new THREE.PlaneGeometry(0.19, 0.19), printMat);
+    const printMat = new THREE.MeshStandardMaterial({ transparent: true, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -60, polygonOffsetUnits: -60 });
+    const print = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.15), printMat);
     this.printMat = printMat;
-    this.props.print = fix(print, B.spine[2], new THREE.Vector3(cx, cy - 0.05, chestZ + 0.05));
+    this.props.print = fix(print, B.spine[2], new THREE.Vector3(cx, cy, chestZ + 0.034));
     // sac à dos (panier vestiaire)
     const pack = new THREE.Group();
     const bag = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.36, 0.14), new THREE.MeshPhysicalMaterial({ color: '#1d1f24', roughness: 0.8, sheen: 0.4 }));

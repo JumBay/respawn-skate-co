@@ -634,7 +634,8 @@ export async function mount(el, opts = {}) {
   function exposeDev() {
     window.__rs = game;
     window.__dev = {
-      THREE, run, hud, state, openShop, openPause, showResults, play, loadFresh, photo: (n) => applyPhoto(game, n), profile, cat,
+      THREE, run, hud, state, openShop, openPause, showResults, play,
+      bench: (o) => import('./dev/bench.js').then((m) => (window.__benchResult = m.runBench(game, o))), loadFresh, photo: (n) => applyPhoto(game, n), profile, cat,
       orbit(deg = 0, dist = 2.4, hh = 1.1) {
         if (deg === null) { game.cameraOverride = null; return; }
         game.cameraOverride = (cam) => {

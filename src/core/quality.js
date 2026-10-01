@@ -11,10 +11,12 @@ export function detectQuality(opts = {}) {
   if ((coarse && (mem <= 4 || cores <= 4))) tier = 'low';
   const forced = opts.quality || new URLSearchParams(location.search).get('quality');
   if (forced === 'low' || forced === 'mid' || forced === 'high') tier = forced;
-  const prq = parseFloat(new URLSearchParams(location.search).get('pr'));
+  const qs = new URLSearchParams(location.search);
+  const prq = parseFloat(qs.get('pr'));
+  const forceTouch = opts.touch === true || qs.get('touch') === '1';
   return {
     tier,
-    touch: coarse || ('ontouchstart' in window && !mq('(pointer: fine)')),
+    touch: forceTouch || coarse || ('ontouchstart' in window && !mq('(pointer: fine)')),
     reducedMotion,
     shadows: tier === 'high',
     bloom: tier === 'high',
@@ -24,6 +26,7 @@ export function detectQuality(opts = {}) {
 
 export function hasWebGL2() {
   try {
+    if (new URLSearchParams(location.search).has('nowebgl')) return false;
     const c = document.createElement('canvas');
     return !!c.getContext('webgl2');
   } catch (e) {

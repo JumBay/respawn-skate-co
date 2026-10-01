@@ -411,7 +411,12 @@ export async function mount(el, opts = {}) {
       try {
         if (quality.touch && navigator.share) await navigator.share({ url: link, text: t('challenge.from', { name: profile.name || 'Rider', score: fmt(r.score) }) });
         else { await navigator.clipboard.writeText(link); toast(t('results.copied')); }
-      } catch (e) { if (!e || e.name !== 'AbortError') { prompt('', link); } }
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+        // presse-papiers refusé : le lien s'affiche, sélectionné, à copier à la main
+        const box = h('input', { class: 'rs-input', readonly: true, value: link, 'aria-label': t('results.challenge'), onFocus: (ev) => ev.target.select() });
+        chalBtn.replaceWith(box); box.focus(); box.select();
+      }
     } }, t('results.challenge'));
     openModal(t('results.title'),
       h('div', { class: 'rs-bigscore' }, fmt(r.score)),

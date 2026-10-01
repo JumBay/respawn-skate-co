@@ -182,7 +182,7 @@
 .rs-pad .rs-b-grab { right: 6px; bottom: 96px; }
 .rs-pad .rs-b-grind { right: 92px; bottom: 92px; background: var(--cone) !important; }
 .rs-pad .rs-b-manual { right: 160px; bottom: 70px; width: 52px; height: 52px; font-size: 9px; }
-.rs-pad .rs-b-special { right: 64px; bottom: 160px; width: 52px; height: 52px; font-size: 9px; opacity: .45; }
+.rs-pad .rs-b-special { right: 64px; bottom: 160px; width: 56px; height: 56px; font-size: 7.5px; opacity: .45; }
 .rs-pad .rs-b-special.rs-ready { opacity: 1; background: var(--pink) !important; color: #fff !important; }
 
 /* --- panneaux (pause, shop, résultats) --------------------------------------------------------- */

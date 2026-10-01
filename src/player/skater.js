@@ -223,9 +223,11 @@ function garmentZones(rig, A) {
   }
   const drape = (i, slope = 0.3) => {
     const nz = A.sn[i * 3 + 2];
-    if (nz < 0.25 || y(i) > chestY || y(i) < waist - 0.12) return 0;
+    if (nz < 0.5 || y(i) > chestY || y(i) < waist - 0.12 || Math.abs(A.model[i * 3]) > 0.13) return 0;
     const target = chestZ - (chestY - y(i)) * slope;
-    return Math.max(0, target - A.model[i * 3 + 2]) / Math.max(0.35, nz);
+    // fondu vers les côtés pour ne pas créer de marche
+    const side = 1 - THREE.MathUtils.smoothstep(Math.abs(A.model[i * 3]), 0.07, 0.13);
+    return Math.min(0.05, Math.max(0, target - A.model[i * 3 + 2]) / nz) * side;
   };
   const chestPush = (i) => drape(i);
   const upperArm = (i) => is(i, B.uarm.L, B.uarm.R);
@@ -388,7 +390,8 @@ export class Skater {
     pieces.push({ kind: bottom ? bottom.gabarit : 'jeans', prod: bottom, def: ['#2a3550', '#1f2840', PALETTE.cone] });
     const bottomKind = bottom ? bottom.gabarit : 'jeans';
     if (bottomKind === 'shorts' || bottomKind === 'cargo') pieces.push({ kind: 'socks', prod: null, def: [look.socks || '#f3f0e8'] });
-    pieces.push({ kind: feet ? feet.gabarit : 'sneakers_low', prod: feet, def: ['#f3f0e8', '#141416', PALETTE.acid] });
+    const shoeKind = feet ? feet.gabarit : 'sneakers_low';
+    const shoeCols = feet && feet.colors ? [feet.colors.primary, feet.colors.secondary, feet.colors.accent] : ['#f3f0e8', '#141416', PALETTE.acid];
     const covered = new Uint8Array(u.A.model.length / 3);
     for (const pc of pieces) {
       const z = zones[pc.kind]; if (!z) continue;
@@ -402,13 +405,19 @@ export class Skater {
       u.body.parent.add(mesh);
       this.garments.push(mesh);
       if (pc.kind !== 'socks') for (let i = 0; i < sh.keep.length; i++) if (sh.keep[i]) covered[i] = 1;
-      // semelle des chaussures : une deuxième coque fine, plus large, couleur secondaire
-      if (pc.kind.startsWith('sneakers')) {
-        const sole = buildShell(u.body, u.A, { test: (i) => z.test(i) && (u.A.mn[i * 3 + 1] < -0.35 || u.A.model[i * 3 + 1] < 0.012), off: (i) => z.off(i) + 0.006 }, this.rig.k);
-        const sm = new THREE.SkinnedMesh(sole.geo, new THREE.MeshStandardMaterial({ color: cols[1] || '#f3f0e8', roughness: 0.75 }));
-        sm.bind(u.body.skeleton, u.body.bindMatrix); sm.frustumCulled = false; sm.castShadow = this.quality.tier === 'high';
-        u.body.parent.add(sm); this.garments.push(sm);
-      }
+    }
+    // pieds cachés sous les baskets en code
+    if (this.shoeParts) {
+      const fz = zones.sneakers_low;
+      for (let i = 0; i < covered.length; i++) if (fz.test(i)) covered[i] = 1;
+      const upMat = this.fabric('suede', shoeCols[0], 'shoe');
+      const soleCol = new THREE.Color(shoeCols[1] || '#f3f0e8');
+      // une semelle très foncée sur une basket claire : on garde une semelle claire, la couleur 2 va à la bande
+      for (const m of this.shoeParts.upper) m.material = upMat;
+      for (const m of this.shoeParts.collar) { m.material = upMat; m.visible = shoeKind === 'sneakers_high'; }
+      for (const m of this.shoeParts.sole) m.material.color.set(soleCol.getHSL({}).l < 0.15 && new THREE.Color(shoeCols[0]).getHSL({}).l > 0.6 ? '#ece6d8' : soleCol);
+      for (const m of this.shoeParts.band) m.material.color.set(shoeCols[1] || '#141416');
+      for (const m of this.shoeParts.lace) m.material.color.set(shoeCols[2] || '#f3f0e8');
     }
     // le corps ne garde que ce qui n'est pas couvert (pas de peau qui traverse les vêtements)
     const bi = [];
@@ -472,10 +481,12 @@ export class Skater {
     const capMat = new THREE.MeshPhysicalMaterial({ color: PALETTE.acid, roughness: 0.85, sheen: 0.5 });
     const cap = new THREE.Group();
     const crown = new THREE.Mesh(new THREE.SphereGeometry(0.118, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), capMat);
-    crown.scale.set(1.08, 0.82, 1.14);
-    const visor = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.012, 24, 1, false, -Math.PI / 2, Math.PI), capMat);
-    visor.scale.set(1, 1, 0.85); visor.position.set(0, 0.0, 0.09); visor.rotation.x = 0.15;
-    cap.add(crown, visor); cap.position.set(0, -0.062, 0.005);
+    crown.scale.set(1.06, 0.72, 1.12);
+    const visor = new THREE.Mesh(new THREE.CylinderGeometry(0.098, 0.098, 0.01, 28, 1, false, -Math.PI / 2, Math.PI), capMat);
+    visor.scale.set(1, 1, 1.25); visor.position.set(0, 0.004, 0.1); visor.rotation.x = 0.12;
+    const button = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 6), capMat);
+    button.position.y = 0.118 * 0.72;
+    cap.add(crown, visor, button); cap.position.set(0, -0.07, 0.008);
     this.props.cap = fix(cap, B.head, headTop);
     const beanie = new THREE.Group();
     const bb = new THREE.Mesh(new THREE.SphereGeometry(0.11, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.56), capMat.clone());
@@ -497,6 +508,59 @@ export class Skater {
       this.props['knee' + s] = fix(pad(0.07, 0.11), B.calf[s], R.bp[R.i(B.calf[s])].clone().add(new THREE.Vector3(0, -0.02, 0)));
       this.props['elbow' + s] = fix(pad(0.05, 0.08), B.farm[s]);
       this.props['wrist' + s] = fix(pad(0.04, 0.07), B.hand[s], R.bp[R.i(B.farm[s])].clone().lerp(R.bp[R.i(B.hand[s])], 0.85));
+    }
+    // baskets en code (les coques suivaient les orteils) : semelle extrudée, tige galbée, bande, lacets
+    const footI = (sd) => [A.names.indexOf(B.foot[sd]), A.names.indexOf(B.ball[sd])];
+    this.shoeParts = { upper: [], sole: [], band: [], lace: [], collar: [] };
+    for (const sd of ['L', 'R']) {
+      const ids = footI(sd);
+      let x0 = 9, x1 = -9, y0 = 9, y1 = -9, z0 = 9, z1 = -9;
+      for (let i = 0; i < A.dom.length; i++) {
+        if (!ids.includes(A.dom[i])) continue;
+        const x = A.model[i * 3], y = A.model[i * 3 + 1], z = A.model[i * 3 + 2];
+        if (y > R.ankleY + 0.05) continue;
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+      }
+      const L = z1 - z0 + 0.012, W = x1 - x0 + 0.014, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2 + 0.004;
+      const foot = (a, b, k = 0.55) => {
+        const sh = new THREE.Shape();
+        const N = 40;
+        for (let j = 0; j <= N; j++) {
+          const t = (j / N) * Math.PI * 2, c = Math.cos(t), sn = Math.sin(t);
+          let x = a * Math.sign(c) * Math.abs(c) ** k, z = b * Math.sign(sn) * Math.abs(sn) ** k;
+          x *= 1 + 0.1 * (z / b) - (z < -b * 0.3 ? 0.08 : 0);
+          // voûte : le bord intérieur se creuse un peu
+          if ((sd === 'L' ? x < 0 : x > 0) && Math.abs(z) < b * 0.35) x *= 0.93;
+          if (j === 0) sh.moveTo(x, z); else sh.lineTo(x, z);
+        }
+        return sh;
+      };
+      const ext = (shape, depth, bevel) => {
+        const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 8 });
+        g.rotateX(Math.PI / 2); g.translate(0, depth, 0);
+        return g;
+      };
+      const shoe = new THREE.Group();
+      const soleH = 0.02;
+      const sole = new THREE.Mesh(ext(foot(W / 2, L / 2), soleH, 0.005), new THREE.MeshStandardMaterial({ roughness: 0.8 }));
+      const band = new THREE.Mesh(ext(foot(W / 2 + 0.003, L / 2 + 0.003), 0.008, 0.002), new THREE.MeshStandardMaterial({ roughness: 0.6 }));
+      band.position.y = soleH - 0.002;
+      const upH = Math.max(0.06, R.ankleY - y0 + 0.005);
+      // tige : talon haut à l'arrière, bout bas devant (deux demi-ellipsoïdes fondus)
+      const up = new THREE.Group();
+      const hemi = new THREE.SphereGeometry(1, 32, 14, 0, Math.PI * 2, 0, Math.PI / 2);
+      const back = new THREE.Mesh(hemi, null); back.scale.set(W / 2 * 0.95, upH, L * 0.36); back.position.set(0, soleH, -L * 0.12);
+      const toe = new THREE.Mesh(hemi, null); toe.scale.set(W / 2 * 0.93, upH * 0.55, L * 0.33); toe.position.set(0, soleH, L * 0.15);
+      up.add(back, toe);
+      const collar = new THREE.Mesh(new THREE.CylinderGeometry(W * 0.48, W * 0.52, 0.11, 20, 1, true), null);
+      collar.position.set(0, soleH + upH * 0.7, -L * 0.18);
+      const lace = new THREE.Mesh(new THREE.BoxGeometry(W * 0.32, 0.012, L * 0.34), new THREE.MeshStandardMaterial({ roughness: 0.7 }));
+      lace.position.set(0, soleH + upH * 0.68, L * 0.06); lace.rotation.x = -0.5;
+      shoe.add(sole, band, up, collar, lace);
+      shoe.position.set(0, -0.004, 0);
+      shoe.traverse((m) => { if (m.isMesh) m.castShadow = true; });
+      this.shoeParts.sole.push(sole); this.shoeParts.band.push(band); this.shoeParts.upper.push(back, toe); this.shoeParts.collar.push(collar); this.shoeParts.lace.push(lace);
+      this.props['shoe' + sd] = fix(shoe, B.foot[sd], new THREE.Vector3(cx, y0, cz));
     }
     // imprimé de poitrine
     const printMat = new THREE.MeshStandardMaterial({ transparent: true, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -4 });
@@ -527,6 +591,7 @@ export class Skater {
     show('cap', g === 'cap', head);
     show('beanie', g === 'beanie', head);
     show('helmet', !!o.helmet, o.helmet);
+    if (this.props.shoeL) { this.props.shoeL.visible = true; this.props.shoeR.visible = true; }
     // sous un couvre-chef, les cheveux longs restent mais les coiffures hautes sont masquées
     if (this.u && (g === 'beanie' || o.helmet)) for (const name of ['Hair_Buns']) if (this.u.meshes[name]) this.u.meshes[name].visible = false;
     show('kneeL', !!o.knees, o.knees); show('kneeR', !!o.knees, o.knees);

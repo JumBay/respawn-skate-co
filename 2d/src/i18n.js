@@ -1,0 +1,96 @@
+// Textes FR / EN. Même clé de langue que le jeu 3D (« respawn:lang »).
+import { load, save } from '../../src/core/storage.js';
+
+const FR = {
+  exit: 'Sortir · Mode boutique', exitShort: 'Sortir', exitCart: 'Retour au panier', exitProduct: 'Retour à la fiche',
+  soundOn: 'Son', soundOff: 'Muet', lang: 'EN',
+  kicker: 'Garde-robe · vrais produits', title1: 'Compose', title2: 'ton', title3: 'rider',
+  women: 'Femme', men: 'Homme', skinLight: 'Peau claire', skinDark: 'Peau foncée',
+  slot_head: 'Tête', slot_top: 'Haut', slot_bottom: 'Bas', slot_feet: 'Pieds', slot_deck: 'Plateau', slot_wheels: 'Roues',
+  slot_protect: 'Protections', slot_mount: 'Montage', slot_looks: 'Looks complets', none: 'Rien',
+  sizes: 'Mes tailles', sizesHint: 'Servent à tout ajout au panier depuis le jeu.',
+  size_top: 'Haut', size_bottom: 'Bas', size_shoe: 'Pointure', size_protect: 'Protections', size_deck: 'Plateau',
+  sizeOk: 'Taille {s}', sizeSwap: '{w} épuisée → {s}', sizeOut: 'Épuisé', sizeUnique: 'Taille unique',
+  outfit: 'Ton outfit', articles: '{n} article', articlesP: '{n} articles',
+  buy: 'Acheter cet outfit', buyShort: 'Acheter', ride: 'Ride', added: '✓ Dans le panier',
+  addedToast: '{n} article(s) ajouté(s) au panier', addedMock: '(démo : rien n’est envoyé hors de la boutique)', addFail: 'Ajout impossible pour : {list}',
+  locked: 'Exclusif', lockedHint: 'À attraper en run pour le débloquer', lockedSkip: 'Exclusifs non débloqués laissés de côté : {list}',
+  keysHint: 'Espace : maintenir puis relâcher = ollie · ← → ↑ ↓ flips · atterris sur un rail = grind',
+  score: 'Score', speed: 'km/h', loot: 'Butin',
+  pause: 'Pause', resume: 'Reprendre', restart: 'Recommencer', wardrobe: 'Garde-robe', music: 'Musique', musicOn: 'Musique : oui', musicOff: 'Musique : non',
+  controls: 'Maintiens Espace (ou le doigt) puis relâche : ollie. En l’air : flèches ou glisser = flips, garder appuyé = grab. Appuie juste avant de toucher le sol : PERFECT.',
+  rotateTitle: 'Tourne ton téléphone', rotateText: 'Le run est bien plus lisible à l’horizontale.', rotatePlay: 'Jouer quand même',
+  endKicker: 'Fin du run', points: 'points', record: 'Record perso',
+  bdTricks: 'Figures', bdSpeed: 'Vitesse', bdDist: 'Distance', topSpeed: 'Vitesse max', bestCombo: 'Meilleur combo', perfects: 'Perfect',
+  bestChain: 'Meilleur enchaînement', again: 'Rejouer', share: 'Partager', challenge: 'Défier un ami',
+  lootTitle: 'Ton butin', lootN: '{n} article', lootNP: '{n} articles', lootEmpty: 'Rien attrapé cette fois : vise les objets en hauteur et sur les rails.',
+  tryOn: 'Essayer', addCart: 'Ajouter au panier', addAll: 'Tout ajouter',
+  codeTitle: 'Code promo gagné', codeDemo: 'Mode démo : code fictif, aucune remise réelle.', codeCopy: 'Copier', codeCopied: 'Code copié', codeWait: 'Vérification du run…', codeFail: 'Récompense non validée',
+  excl: 'Exclusif débloqué', exclText: '{name} : achat débloqué',
+  tier_bronze: 'Jeton bronze', tier_silver: 'Jeton argent', tier_gold: 'Jeton or',
+  vestKicker: 'Vestiaire', vestTitle: 'Ton skater porte ton panier', vestWorn: 'Sur ton skater', vestBag: 'Sac à dos', vestBagEmpty: 'Sac à dos vide : tout est porté.', vestEmpty: 'Ton panier est vide.', vestRide: 'Rider avec cette tenue',
+  tryKicker: 'Essayage', tryText: 'Le produit est sur ton skater. Change le reste, puis ride.',
+  shareTitle: 'Mon run Respawn', shareText: '{score} points sur Respawn Street Run. Tu me bats ?', copied: 'Lien copié', pngSaved: 'Image enregistrée',
+  challengeFrom: '{name} te défie : {score} points à battre', challengeBeat: 'Défi battu !', challengeLost: 'Défi : encore {d} points',
+  hint_ollie: '<em>Maintiens</em> puis <em>relâche</em> : OLLIE (plus haut si tu tiens)',
+  hint_ollieT: '<em>Maintiens le doigt</em> puis <em>relâche</em> : OLLIE',
+  hint_grind: 'Atterris sur le muret ou le rail : <em>GRIND</em> · attrape ce qui flotte au-dessus',
+  hint_flip: 'En l’air : <em>← → ↑ ↓</em> = FLIPS · garde appuyé = GRAB',
+  hint_flipT: 'En l’air : <em>glisse le doigt</em> = FLIPS · garde-le appuyé = GRAB',
+  hint_perfect: 'Appuie <em>juste avant</em> le sol : <em>PERFECT</em> = plus de vitesse',
+  hint_kick: 'Garde appuyé sur le tremplin : <em>décollage géant</em> (jetons en hauteur !)',
+  perfect: 'PERFECT !', good: 'BIEN', sketchy: 'LIMITE', caught: 'RATTRAPÉ', ouch: 'AÏE !', respawn: 'RESPAWN', respawnSub: 'on ne lâche rien', timeUp: 'TEMPS !', go: 'GO !', goSub: '60 secondes', combo: 'COMBO', steps: '{n} marches', boost: 'BOOST !', magnet: 'AIMANT !', paused: 'PAUSE',
+  demoMode: 'mode démo',
+};
+const EN = {
+  exit: 'Exit · Shop mode', exitShort: 'Exit', exitCart: 'Back to cart', exitProduct: 'Back to product',
+  soundOn: 'Sound', soundOff: 'Muted', lang: 'FR',
+  kicker: 'Wardrobe · real products', title1: 'Build', title2: 'your', title3: 'rider',
+  women: 'Woman', men: 'Man', skinLight: 'Light skin', skinDark: 'Dark skin',
+  slot_head: 'Head', slot_top: 'Top', slot_bottom: 'Bottom', slot_feet: 'Shoes', slot_deck: 'Deck', slot_wheels: 'Wheels',
+  slot_protect: 'Protection', slot_mount: 'Setup', slot_looks: 'Full looks', none: 'None',
+  sizes: 'My sizes', sizesHint: 'Used for everything added to cart from the game.',
+  size_top: 'Top', size_bottom: 'Bottom', size_shoe: 'Shoe', size_protect: 'Pads', size_deck: 'Deck',
+  sizeOk: 'Size {s}', sizeSwap: '{w} sold out → {s}', sizeOut: 'Sold out', sizeUnique: 'One size',
+  outfit: 'Your outfit', articles: '{n} item', articlesP: '{n} items',
+  buy: 'Buy this outfit', buyShort: 'Buy', ride: 'Ride', added: '✓ In your cart',
+  addedToast: '{n} item(s) added to cart', addedMock: '(demo: nothing is sent outside the shop)', addFail: 'Could not add: {list}',
+  locked: 'Exclusive', lockedHint: 'Catch it during a run to unlock it', lockedSkip: 'Locked exclusives left out: {list}',
+  keysHint: 'Space: hold then release = ollie · ← → ↑ ↓ flips · land on a rail = grind',
+  score: 'Score', speed: 'km/h', loot: 'Loot',
+  pause: 'Pause', resume: 'Resume', restart: 'Restart', wardrobe: 'Wardrobe', music: 'Music', musicOn: 'Music: on', musicOff: 'Music: off',
+  controls: 'Hold Space (or your finger) then release: ollie. In the air: arrows or swipe = flips, keep holding = grab. Press just before landing: PERFECT.',
+  rotateTitle: 'Turn your phone', rotateText: 'The run reads much better in landscape.', rotatePlay: 'Play anyway',
+  endKicker: 'Run over', points: 'points', record: 'Personal best',
+  bdTricks: 'Tricks', bdSpeed: 'Speed', bdDist: 'Distance', topSpeed: 'Top speed', bestCombo: 'Best combo', perfects: 'Perfect',
+  bestChain: 'Best line', again: 'Play again', share: 'Share', challenge: 'Challenge a friend',
+  lootTitle: 'Your loot', lootN: '{n} item', lootNP: '{n} items', lootEmpty: 'Nothing caught this time: aim for items up high and over rails.',
+  tryOn: 'Try on', addCart: 'Add to cart', addAll: 'Add all',
+  codeTitle: 'Promo code won', codeDemo: 'Demo mode: fake code, no real discount.', codeCopy: 'Copy', codeCopied: 'Code copied', codeWait: 'Checking your run…', codeFail: 'Reward not validated',
+  excl: 'Exclusive unlocked', exclText: '{name}: now available',
+  tier_bronze: 'Bronze token', tier_silver: 'Silver token', tier_gold: 'Gold token',
+  vestKicker: 'Locker room', vestTitle: 'Your skater wears your cart', vestWorn: 'On your skater', vestBag: 'Backpack', vestBagEmpty: 'Empty backpack: everything is worn.', vestEmpty: 'Your cart is empty.', vestRide: 'Ride in this outfit',
+  tryKicker: 'Try-on', tryText: 'The product is on your skater. Change the rest, then ride.',
+  shareTitle: 'My Respawn run', shareText: '{score} points on Respawn Street Run. Can you beat me?', copied: 'Link copied', pngSaved: 'Image saved',
+  challengeFrom: '{name} challenges you: beat {score} points', challengeBeat: 'Challenge beaten!', challengeLost: 'Challenge: {d} points to go',
+  hint_ollie: '<em>Hold</em> then <em>release</em>: OLLIE (higher if you hold)',
+  hint_ollieT: '<em>Hold your finger</em> then <em>release</em>: OLLIE',
+  hint_grind: 'Land on the ledge or rail: <em>GRIND</em> · grab what floats above',
+  hint_flip: 'In the air: <em>← → ↑ ↓</em> = FLIPS · keep holding = GRAB',
+  hint_flipT: 'In the air: <em>swipe</em> = FLIPS · keep holding = GRAB',
+  hint_perfect: 'Press <em>just before</em> landing: <em>PERFECT</em> = more speed',
+  hint_kick: 'Hold on the kicker: <em>giant launch</em> (tokens up high!)',
+  perfect: 'PERFECT!', good: 'NICE', sketchy: 'SKETCHY', caught: 'SLOPPY', ouch: 'OUCH!', respawn: 'RESPAWN', respawnSub: 'never give up', timeUp: 'TIME!', go: 'GO!', goSub: '60 seconds', combo: 'COMBO', steps: '{n} stairs', boost: 'BOOST!', magnet: 'MAGNET!', paused: 'PAUSED',
+  demoMode: 'demo mode',
+};
+let lang = (() => {
+  const saved = load('lang', null); if (saved === 'fr' || saved === 'en') return saved;
+  return /^fr/i.test(navigator.language || 'fr') ? 'fr' : 'en';
+})();
+const subs = new Set();
+export const getLang = () => lang;
+export function setLang(l) { lang = l === 'en' ? 'en' : 'fr'; save('lang', lang); subs.forEach((f) => f(lang)); }
+export const onLang = (f) => { subs.add(f); return () => subs.delete(f); };
+export function t(k, v) { let s = (lang === 'en' ? EN : FR)[k] ?? FR[k] ?? k; if (v) for (const [a, b] of Object.entries(v)) s = s.replaceAll('{' + a + '}', b); return s; }
+export const fmt = (n) => Math.round(n).toLocaleString(lang === 'en' ? 'en-US' : 'fr-FR').replace(/ | /g, ' ');
+export const price = (n) => (Math.round(n * 100) / 100).toLocaleString(lang === 'en' ? 'en-IE' : 'fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: n % 1 ? 2 : 0 });

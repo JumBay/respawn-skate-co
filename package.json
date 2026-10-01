@@ -9,7 +9,9 @@
     "dev": "vite --host",
     "build": "node scripts/sync-catalog.mjs && vite build",
     "preview": "vite preview --host",
-    "models": "node scripts/build-ubc.mjs"
+    "models": "node scripts/build-ubc.mjs",
+    "dev:2d": "vite --config 2d/vite.config.js --host",
+    "build:2d": "node 2d/scripts/sync-catalog.mjs && vite build --config 2d/vite.config.js"
   },
   "dependencies": {
     "three": "0.186.1"

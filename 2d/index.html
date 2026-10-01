@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Respawn Street Run (2D) · banc</title>
+<style>
+  body{margin:0;font:16px system-ui;background:#f3f0e8;color:#1a1026}
+  header{padding:18px 24px;background:#141416;color:#c8ff2e;font-weight:900;letter-spacing:.05em}
+  main{max-width:960px;margin:0 auto;padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
+  .card{background:#fff;border-radius:12px;height:220px;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+  #replay{position:fixed;left:18px;bottom:18px;z-index:50;font:800 15px system-ui;padding:.8em 1.2em;border-radius:999px;border:3px solid #141416;background:#c8ff2e;cursor:pointer;display:none}
+</style>
+</head>
+<body>
+<header>RESPAWN SKATE CO. · accueil simulé (banc du jeu 2D)</header>
+<main><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div><div class="card"></div></main>
+<button id="replay" type="button">▶ Rejouer</button>
+<script type="module">
+  // Banc : ?bundle (charge dist/respawn-2d.js au lieu des sources), ?try=<id> (essayage),
+  // ?vest (vestiaire d'un panier d'exemple), ?provider=local (fournisseur de récompenses local,
+  // comme le passera le script de la boutique ; codes FACTICES ici), ?auto (pilote automatique).
+  const q = new URLSearchParams(location.search);
+  const mod = await import(q.has('bundle') ? '../dist/respawn-2d.js' : './src/main.js');
+  const { mount, wasExited, clearExited } = mod;
+  // Exemple de fournisseur local : la boutique passera le sien (ses vrais codes restent hors du dépôt).
+  const TEST_CODES = { bronze: { code: 'TEST-BRONZE', label: '-10 % (test)' }, silver: { code: 'TEST-ARGENT', label: '-15 % (test)' }, gold: { code: 'TEST-OR', label: '-20 % (test)' } };
+  const localRewards = {
+    async session({ challengeSeed } = {}) { return { runId: 'local-' + Date.now(), seed: challengeSeed || ((Math.random() * 2 ** 31) >>> 0) || 1 }; },
+    async claim({ type, tier }) { return type === 'code' ? { ok: true, ...TEST_CODES[tier] } : { ok: true }; },
+  };
+  const replay = document.getElementById('replay');
+  const opts = { overlay: true, shopUrl: '/', onEvent: (n, d) => console.info('[respawn]', n, JSON.stringify(d)) };
+  if (q.get('provider') === 'local') opts.rewards = localRewards;
+  if (q.has('try')) Object.assign(opts, { tryOn: Number(q.get('try')), remember: false });
+  if (q.has('vest')) Object.assign(opts, { remember: false, vestiaire: { items: [{ id: 4, size: 'L', qty: 1 }, { id: 9, size: '40', qty: 1 }, { id: 11, qty: 1 }, { id: 14, size: '40', qty: 1 }, { id: 21, size: '8"', qty: 1 }, { id: 23, qty: 1 }, { id: 1, size: 'M', qty: 2 }, { id: 12, qty: 1 }, { id: 17, size: 'M', qty: 1 }] } });
+  if (q.has('auto')) opts.autopilot = true;
+  async function open() { clearExited(); replay.style.display = 'none'; window.game = await mount(null, opts); }
+  window.addEventListener('respawn:destroy', () => { replay.style.display = 'block'; });
+  replay.addEventListener('click', open);
+  if (wasExited() && !q.has('force') && !q.has('try') && !q.has('vest')) replay.style.display = 'block'; else open();
+</script>
+</body>
+</html>

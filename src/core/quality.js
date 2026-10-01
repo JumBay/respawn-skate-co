@@ -11,13 +11,14 @@ export function detectQuality(opts = {}) {
   if ((coarse && (mem <= 4 || cores <= 4))) tier = 'low';
   const forced = opts.quality || new URLSearchParams(location.search).get('quality');
   if (forced === 'low' || forced === 'mid' || forced === 'high') tier = forced;
+  const prq = parseFloat(new URLSearchParams(location.search).get('pr'));
   return {
     tier,
     touch: coarse || ('ontouchstart' in window && !mq('(pointer: fine)')),
     reducedMotion,
     shadows: tier === 'high',
     bloom: tier === 'high',
-    pixelRatio: Math.min(window.devicePixelRatio || 1, tier === 'high' ? 2 : tier === 'mid' ? 1.5 : 1.25),
+    pixelRatio: prq > 0 ? prq : Math.min(window.devicePixelRatio || 1, tier === 'high' ? 2 : tier === 'mid' ? 1.5 : 1.25),
   };
 }
 

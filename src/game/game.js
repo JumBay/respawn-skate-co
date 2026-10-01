@@ -94,16 +94,41 @@ export class Game {
   }
 
   start() {
+    this.running = true;
     const loop = (t) => {
+      if (!this.running || this.sleeping) { this.raf = 0; return; }
       this.raf = requestAnimationFrame(loop);
       this.clock.update(t);
       const dt = Math.min(this.clock.getDelta(), 0.05);
       this.frame(dt);
     };
+    this._loop = loop;
     this.raf = requestAnimationFrame(loop);
+    // vraie pause : onglet masqué ou fenêtre sans focus -> plus aucun rendu
+    const qs = new URLSearchParams(location.search);
+    const sleep = () => { if (this.sleeping) return; this.sleeping = true; this.ev.emit('sleep'); };
+    const wake = () => {
+      if (!this.sleeping || document.hidden) return;
+      this.sleeping = false; this.clock.reset && this.clock.reset();
+      this.ev.emit('wake');
+      if (this.running && !this.raf) this.raf = requestAnimationFrame(this._loop);
+    };
+    this._vis = () => (document.hidden ? sleep() : wake());
+    this._blur = () => { if (!qs.has('nopause')) sleep(); };
+    this._focus = () => wake();
+    document.addEventListener('visibilitychange', this._vis);
+    window.addEventListener('blur', this._blur);
+    window.addEventListener('focus', this._focus);
+    window.addEventListener('pointerdown', this._focus);
   }
 
-  stop() { cancelAnimationFrame(this.raf); }
+  stop() {
+    this.running = false; cancelAnimationFrame(this.raf); this.raf = 0;
+    document.removeEventListener('visibilitychange', this._vis);
+    window.removeEventListener('blur', this._blur);
+    window.removeEventListener('focus', this._focus);
+    window.removeEventListener('pointerdown', this._focus);
+  }
 
   frame(dt) {
     // mesure des images par seconde (qualité adaptative)
@@ -155,9 +180,7 @@ export class Game {
       darkslide: c.state === 'grind' && this.tricks.grindSpecial,
     };
     if (this.photo && this.photo.st) Object.assign(st, this.photo.st);
-    if (c.state === 'bail') {
-      if (s.mode !== 'clip') s.playClip('Death', { loop: false, fade: 0.12 });
-    } else if (s.mode === 'clip' && this.mode === 'play') s.stopClip();
+    st.bail = c.state === 'bail';
     s.update(dt, st);
     // ombre peinte
     const h = this.park.terrain.sample(c.pos.x, c.pos.z);

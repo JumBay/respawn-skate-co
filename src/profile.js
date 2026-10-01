@@ -7,7 +7,7 @@ const DEFAULT = {
   created: false,
   name: '',
   gender: 'women',
-  head: 'Casual_Head',
+  head: 'Hair_Long',
   skin: '#C98E62',
   hairColor: '#4A2F1E',
   socks: '#F3F0E8',

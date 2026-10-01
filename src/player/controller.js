@@ -38,6 +38,10 @@ export class SkaterController {
     this.speed = 0;
     this.surfaceKind = 'concrete';
     this.frozen = false;
+    // mode assisté (défaut) : vitesse de croisière, montée de rampe facilitée, réception
+    // alignée, grinds aimantés, équilibre stable
+    this.assist = true;
+    this.grindTarget = null;
   }
 
   reset(x, z, yaw) {
@@ -92,11 +96,11 @@ export class SkaterController {
     // ollie : on s'accroupit en tenant, on saute en relâchant
     if (b.ollie.down && (this.state === 'ground' || this.state === 'grind')) this.crouch = Math.min(1, this.crouch + dt * 5);
     else this.crouch = Math.max(0, this.crouch - dt * 8);
-    if (b.ollie.released && (this.state === 'ground' || this.state === 'grind')) this.ollie(Math.min(1, b.ollie.t / 0.35));
+    if (b.ollie.released && (this.state === 'ground' || this.state === 'grind')) this.ollie(Math.min(1, b.ollie.t / 0.3));
 
     if (this.state === 'ground') {
       // grind demandé au sol : petit ollie automatique, le grind est gardé en mémoire
-      if (b.grind.pressed && this.findRail(1.6, 1.2)) this.ollie(0.4);
+      if (b.grind.pressed) { const r = this.findRail(this.assist ? 2.4 : 1.6, 1.2); if (r) this.grindHop(r); }
       if (this.manualBuffer > 0 && !this.manual && this.speed > 1.2) this.startManual(input);
       else if (b.manual.pressed && this.manual) this.endManual(true);
       if (b.special.pressed && this.manual && this.tricks.specialReady()) this.tricks.special('manual', input.dir8());
@@ -111,7 +115,8 @@ export class SkaterController {
   }
 
   ollie(charge = 0.5) {
-    const pop = (5.2 + charge * 1.6) * this.stats.pop;
+    // ollie arcade : même un appui bref passe un funbox, chargé il monte nettement plus haut
+    const pop = (this.assist ? 6.3 + charge * 1.3 : 5.2 + charge * 1.6) * this.stats.pop;
     if (this.state === 'grind') {
       const g = this.grind;
       this.vel.copy(g.rail.dir).multiplyScalar(g.u);
@@ -127,6 +132,29 @@ export class SkaterController {
       this.enterAir(this.normal.y < 0.5, 'ollie');
     }
     this.ev.emit('ollie', { charge });
+  }
+
+  // saut aimanté vers un rail : on vise le dessus du rail, il est accroché à l'apex
+  grindHop(hit) {
+    const r = hit.rail, p = this.pos;
+    const cx = r.a.x + r.dir.x * hit.s, cy = r.a.y + r.dir.y * hit.s, cz = r.a.z + r.dir.z * hit.s;
+    const rise = Math.max(0.15, cy - p.y + 0.22);
+    const vy = Math.sqrt(2 * GRAVITY * rise);
+    const T = vy / GRAVITY;
+    // composante le long du rail gardée, l'écart latéral comblé en T
+    const along = this.vel.x * r.dir.x + this.vel.z * r.dir.z;
+    const hl = Math.hypot(r.dir.x, r.dir.z) || 1;
+    const ax = (r.dir.x / hl) * along, az = (r.dir.z / hl) * along;
+    // point visé : où sera le rail en T, avancé de la vitesse le long du rail
+    const tx = cx + ax * T, tz = cz + az * T;
+    const lx = (tx - p.x) / T - ax, lz = (tz - p.z) / T - az;
+    this.vel.set(ax + lx, vy, az + lz);
+    if (this.manual) this.endManual(false);
+    this.grindTarget = r;
+    this.grindBuffer = 0.8;
+    this.pos.y += 0.02;
+    this.enterAir(false, 'ollie');
+    this.ev.emit('ollie', { charge: 0.3 });
   }
 
   enterAir(vert, reason = 'drop') {
@@ -179,8 +207,11 @@ export class SkaterController {
 
     // direction : tourne la vitesse et la planche autour de la normale
     const steer = input.state.x;
+    const A = this.assist;
     if (Math.abs(steer) > 0.01) {
-      const rate = (2.7 - Math.min(1.1, speed * 0.06)) * this.stats.grip * (this.manual ? 0.6 : 1);
+      // sur une paroi raide, on garde sa ligne (la direction sert surtout au plat)
+      const wall = A && n.y < 0.75 ? 0.35 : 1;
+      const rate = (A ? 3.3 - Math.min(1.0, speed * 0.05) : 2.7 - Math.min(1.1, speed * 0.06)) * this.stats.grip * (this.manual ? 0.6 : 1) * wall;
       const ang = -steer * rate * dt;
       _q.setFromAxisAngle(n, ang);
       v.applyQuaternion(_q);
@@ -190,35 +221,48 @@ export class SkaterController {
     // pousser / freiner
     const push = input.state.y > 0.3 && !this.manual;
     const brake = input.state.y < -0.5 && !this.manual;
-    const maxPush = 9.5 * this.stats.glisse;
+    const maxPush = (A ? 11.5 : 9.5) * this.stats.glisse;
+    const cruise = 7.5 * this.stats.glisse;
     this.pushing = 0;
     if (push && n.y > 0.85) {
       const along = v.dot(fwd) * sgn;
       if (along < maxPush) {
-        v.addScaledVector(fwd, sgn * 9 * dt * (along < 2 ? 1.6 : 1));
+        v.addScaledVector(fwd, sgn * (A ? 11 : 9) * dt * (along < 2 ? 1.6 : 1));
         this.pushing = 1;
       }
+    } else if (A && !brake && !this.manual && n.y > 0.9) {
+      // croisière : une fois lancé, on garde un bon rythme sans avoir à pousser
+      const along = v.dot(fwd) * sgn;
+      if (along > 1.0 && along < cruise) v.addScaledVector(fwd, sgn * 4.5 * dt);
     }
     if (brake && speed > 0.2) {
-      const dec = Math.min(speed, 10 * dt);
+      const dec = Math.min(speed, (A ? 15 : 10) * dt);
       v.addScaledVector(v, -dec / Math.max(speed, 1e-4));
       if (speed > 3) this.ev.emit('powerslide', { speed });
     }
 
-    // gravité le long de la pente
+    // gravité le long de la pente (assistée en montée : on atteint la lèvre et on décolle)
     _v.set(0, -GRAVITY, 0);
     _v.addScaledVector(n, -_v.dot(n));
-    v.addScaledVector(_v, dt);
+    const climbing = v.y > 0.05 && n.y < 0.97;
+    v.addScaledVector(_v, dt * (A && climbing ? 0.5 : 1));
+    // en montant une paroi, la dérive latérale est absorbée : on monte droit vers la lèvre
+    if (A && n.y < 0.9 && n.y > 0.05) {
+      _n.set(n.x, 0, n.z).normalize();               // direction horizontale de la pente
+      const lat = v.x * -_n.z + v.z * _n.x; // composante latérale
+      v.x -= -_n.z * lat * (1 - Math.exp(-2.5 * dt));
+      v.z -= _n.x * lat * (1 - Math.exp(-2.5 * dt));
+    }
 
     // frottements : roulement + air
-    const roll = 0.045 / this.stats.glisse;
+    const roll = (A ? 0.02 : 0.045) / this.stats.glisse;
     v.multiplyScalar(Math.max(0, 1 - roll * dt - 0.0016 * speed * dt));
     if (speed < 0.08 && !push && n.y > 0.97) v.set(0, 0, 0);
 
     // adhérence : la vitesse latérale à la planche est absorbée par les roues
     const along = v.dot(fwd);
     _v.copy(v).addScaledVector(fwd, -along);
-    const gripK = 7 * this.stats.grip;
+    const gripK = (A ? 14 : 7) * this.stats.grip;
     v.addScaledVector(_v, -(1 - Math.exp(-gripK * dt)));
 
     // la planche suit la vitesse (sens fakie compris)
@@ -228,7 +272,7 @@ export class SkaterController {
       const target = this.fakie ? wrap(vy + Math.PI) : vy;
       let d = wrap(target - this.yaw);
       if (Math.abs(d) > Math.PI / 2) { this.fakie = !this.fakie; d = wrap(d + Math.PI); }
-      this.yaw = wrap(this.yaw + d * (1 - Math.exp(-10 * dt)));
+      this.yaw = wrap(this.yaw + d * (1 - Math.exp(-(A ? 16 : 10) * dt)));
     }
     // fakie quand on redescend en arrière d'une rampe
     const fdot = v.dot(dirFromYaw(this.yaw, _n));
@@ -306,7 +350,7 @@ export class SkaterController {
         if (vn < 0) {
           const sp = v.length();
           v.x -= nx * vn * 1.4; v.z -= nz * vn * 1.4;
-          if (sp > 8.5 && -vn > 6.5 && this.state === 'ground') { this.bail('obstacle'); return; }
+          if (!this.assist && sp > 8.5 && -vn > 6.5 && this.state === 'ground') { this.bail('obstacle'); return; }
           this.ev.emit('bonk', { speed: -vn });
         }
       }
@@ -357,10 +401,36 @@ export class SkaterController {
     }
     this.tricks.updateAir(dt);
 
-    // grind ?
+    // réception assistée : près du sol en descendant, la planche se recale sur la trajectoire
+    if (this.assist && v.y < 0) {
+      const gh = T.height(this.pos.x, this.pos.z);
+      const above = this.pos.y - gh;
+      const vh = Math.hypot(v.x, v.z);
+      if (above < 1.4 && vh > 0.8) {
+        const vy = Math.atan2(v.x, v.z);
+        const d1 = wrap(vy - this.yaw), d2 = wrap(vy + Math.PI - this.yaw);
+        const d = Math.abs(d1) < Math.abs(d2) ? d1 : d2;
+        if (Math.abs(d) < 1.9 && Math.abs(input.state.x) < 0.5) this.yaw = wrap(this.yaw + d * (1 - Math.exp(-7 * dt)));
+      }
+    }
+
+    // grind ? (aimanté : un rail visé ou proche est attrapé de plus loin)
     if (this.grindBuffer > 0 || input.btn.grind.down) {
-      const r = this.findRail(0.75, 0.75);
+      const reach = this.assist ? 1.1 : 0.75;
+      const r = this.findRail(reach, this.assist ? 1.0 : 0.75);
       if (r) { this.startGrind(r, input); return; }
+      // en l'air, appui sur grind près d'un rail : on est attiré vers lui
+      if (this.assist && !this.grindTarget) {
+        const near = this.findRail(2.2, 2.0);
+        if (near) { this.grindTarget = near.rail; }
+      }
+      if (this.assist && this.grindTarget) {
+        const r2 = this.grindTarget;
+        _v.subVectors(this.pos, r2.a);
+        const s2 = Math.max(0, Math.min(r2.len, _v.dot(r2.dir)));
+        const dx = r2.a.x + r2.dir.x * s2 - this.pos.x, dz = r2.a.z + r2.dir.z * s2 - this.pos.z;
+        v.x += dx * 6 * dt; v.z += dz * 6 * dt;
+      }
     }
 
     const ox = this.pos.x, oy = this.pos.y, oz = this.pos.z;
@@ -401,23 +471,28 @@ export class SkaterController {
     // alignement planche / vitesse
     const vh = Math.hypot(v.x, v.z);
     let ok = true, quality = 'clean', diff = 0;
-    if (this.tricks.busy()) { ok = false; quality = 'flip'; }
+    if (this.tricks.busy()) {
+      // en assisté, un flip presque fini se pose quand même (réception limite)
+      if (this.assist && this.tricks.air && this.tricks.air.flip && this.tricks.air.flip.t > this.tricks.air.flip.dur * 0.55) quality = 'sketchy';
+      else { ok = false; quality = 'flip'; }
+    }
     if (vh > 1.2) {
       const vy = Math.atan2(v.x, v.z);
       const d1 = Math.abs(wrap(vy - this.yaw)), d2 = Math.abs(wrap(vy + Math.PI - this.yaw));
       diff = Math.min(d1, d2);
       this.fakie = d2 < d1;
-      const tol = (52 * Math.PI / 180) * this.stats.grip;
-      if (diff > tol) { ok = false; quality = 'angle'; }
+      const tol = ((this.assist ? 80 : 52) * Math.PI / 180) * this.stats.grip;
+      if (diff > tol && ok) { ok = false; quality = 'angle'; }
       else {
         // aide à l'atterrissage : la planche se recale
         const target = this.fakie ? wrap(vy + Math.PI) : vy;
         this.yaw = target;
-        if (diff < 0.2) quality = 'perfect'; else if (diff > tol * 0.7) quality = 'sketchy';
+        if (quality !== 'sketchy') { if (diff < 0.2) quality = 'perfect'; else if (diff > tol * 0.7) quality = 'sketchy'; }
       }
     }
     if (!ok) { this.bail(quality); return; }
     this.state = 'ground';
+    this.grindTarget = null;
     this.lastSafe.t = 0;
     this.visualUp.lerp(n, 0.5);
     const res = this.tricks.land({ spin: a.spin, vert: a.vert, fakie: this.fakie, quality, airTime: a.t });
@@ -440,7 +515,7 @@ export class SkaterController {
       const dh = Math.hypot(p.x - cx, p.z - cz);
       const dyv = p.y - cy;
       if (dyv < -0.45 || dyv > maxAbove) continue;
-      if (this.state === 'air' && this.vel.y > 3.5) continue;
+      if (this.state === 'air' && this.vel.y > (this.assist ? 1.5 : 3.5) && dyv < 0.15) continue;
       if (dh < bestD) { bestD = dh; best = { rail: r, s }; }
     }
     return best;
@@ -462,6 +537,7 @@ export class SkaterController {
     this.yaw = this.grind.baseYaw;
     this.fakie = false;
     this.grindBuffer = 0;
+    this.grindTarget = null;
     this.tricks.grindStart(r, slide, dir);
     this.ev.emit('grind', { rail: r });
   }
@@ -475,7 +551,12 @@ export class SkaterController {
     g.minS = Math.min(g.minS, g.s); g.maxS = Math.max(g.maxS, g.s);
     // équilibre : il dérive de plus en plus, gauche / droite le corrige
     const diff = 1.2 + g.t * 0.35;
-    g.balVel += (g.balance * diff * 2.2 + (Math.random() - 0.5) * 1.6) * dt / Math.max(0.7, this.stats.grip);
+    if (this.assist) {
+      // équilibre simple : il revient de lui-même au centre, gauche / droite l'aide ; ça ne se
+      // corse qu'après quelques secondes
+      const unstable = Math.max(0, g.t - 3) * 0.6;
+      g.balVel += (g.balance * (unstable - 2.2) + (Math.random() - 0.5) * 0.9) * dt;
+    } else g.balVel += (g.balance * diff * 2.2 + (Math.random() - 0.5) * 1.6) * dt / Math.max(0.7, this.stats.grip);
     g.balVel += input.state.x * 5.5 * dt;
     g.balVel *= 1 - 1.6 * dt;
     g.balance += g.balVel * dt;

@@ -88,7 +88,7 @@ export function createShop({ catalog, profile, bridge, isUnlocked, unlockGoal, o
     const isWorn = Object.values(profile.loadout).includes(p.id);
     const wear = wearable ? h('button', { class: 'rs-btn rs-btn--ghost', disabled: locked || null, onClick: () => { onTry(p, true); render(); } }, isWorn ? t('shop.wear') + ' ✓' : t('shop.try')) : null;
     const view = h('a', { class: 'rs-btn rs-btn--ghost', href: p.url, target: '_top' }, t('shop.view'));
-    detail.append(
+    detail.append(...[
       h('h3', {}, p.name),
       h('div', { class: 'rs-price' }, price(p.price_ttc)),
       locked ? h('div', { class: 'rs-unlock' }, '🔒 ' + t('shop.locked', { goal: unlockGoal(p) })) : null,
@@ -96,7 +96,7 @@ export function createShop({ catalog, profile, bridge, isUnlocked, unlockGoal, o
         ...stats.map((k) => h('div', { class: 'rs-stat' }, h('span', {}, t('stat.' + k)), h('i', {}, h('b', { style: { width: `${st[k] * 10}%` } })), h('span', {}, String(st[k]))))) : null,
       sizes, swap,
       h('div', { class: 'rs-actions' }, add, wear, view),
-    );
+    ].filter(Boolean));
   }
 
   function render() {

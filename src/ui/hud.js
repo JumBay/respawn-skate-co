@@ -27,7 +27,7 @@ export function createHUD({ quality, onPause, onShop }) {
   const btns = h('div', { class: 'rs-hudbtns' }, shopBtn, pauseBtn);
   const fps = h('div', { class: 'rs-fps' });
   const el = h('div', { class: 'rs-hud' }, score, timer, letters, special, specialLabel, objectives, combo, balance, prompt, tuto, btns, fps);
-  if (quality.touch) btns.style.bottom = 'auto', btns.style.top = 'calc(max(12px, env(safe-area-inset-top)) + 52px)';
+  if (quality.touch) { btns.style.bottom = 'auto'; btns.style.right = 'auto'; btns.style.left = 'max(16px, env(safe-area-inset-left))'; btns.style.top = 'calc(max(12px, env(safe-area-inset-top)) + 150px)'; }
   // sur téléphone, la liste d'objectifs s'ouvre d'un tap sur le chrono
   timer.style.pointerEvents = 'auto';
   timer.addEventListener('click', () => objectives.classList.toggle('rs-open'));
@@ -37,6 +37,7 @@ export function createHUD({ quality, onPause, onShop }) {
     el,
     setScore(n) { if (n !== lastScore) { score.lastChild.textContent = fmt(n); lastScore = n; } },
     setTime(sec, mode) {
+      timer.classList.toggle('rs-free', mode !== 'run');
       if (mode !== 'run') { timer.textContent = t('hud.free'); timer.classList.remove('rs-warn'); return; }
       const s = Math.max(0, Math.ceil(sec));
       timer.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;

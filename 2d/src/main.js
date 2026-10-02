@@ -1,33 +1,35 @@
 // Respawn Street Run (2D) : point d'entrée. Même API que le jeu 3D (src/main.js) pour que les scripts
 // de la boutique changent à peine :
-//   mount(el|null, { overlay, shopUrl, onEvent, rewards, tryOn, vestiaire, remember, zIndex, cartMode, autopilot })
-//   -> { destroy, pause, openWardrobe, bridge, engine }    wasExited() / clearExited()
-// Événements : opts.onEvent(nom, données) et window « respawn:<nom> » : ready, shopOpen, runStart,
-// runEnd, lootCaught, tierReached, codeRevealed, exclusiveUnlocked, objectiveUnlocked, cartAdd,
-// buyOutfit, share, pause, exit, destroy.
-// Récompenses : AUCUN code promo dans ce bundle. opts.rewards est un fournisseur asynchrone
-// injecté par la page ({ session(), claim() }, voir rewards.js) ; sans lui, mode démo « CODE-DEMO ».
+//   mount(el|null, { overlay, shopUrl, onEvent, supabase, server, rulesUrl, newsletter, tryOn, vestiaire, remember, zIndex, cartMode, autopilot })
+//   -> { destroy, pause, openWardrobe, openLeaderboard, bridge, engine }    wasExited() / clearExited()
+// Serveur : CONTRAT-SERVEUR.md. `supabase: { url, anonKey }` branche rewards-supabase.js ; `server`
+// accepte tout objet aux mêmes méthodes (faux serveur de test). Sans les deux : mode hors ligne
+// (pas de classement ni de codes, record et fantôme locaux). AUCUN code promo dans ce bundle.
+// Événements : opts.onEvent(nom, données) et window « respawn:<nom> » (liste dans README).
 import css from './styles.css?inline';
 import { createEngine, RUN_LEN } from './engine.js';
 import { createAudio } from './audio.js';
 import { drawIcon, drawRider, drawBoardPlan, DISP, ACID, CRAIE, INK } from './draw.js';
 import { CAT, pieceOf, lookOf, dressFromItems, shortName, SKINS, PROTECT_SLOTS, MOUNT_SLOTS } from './looks.js';
 import { t, getLang, setLang, onLang, fmt, price } from './i18n.js';
-import { createRewards, readChallenge, challengeLink } from './rewards.js';
+import { deviceId, readChallenge, challengeLink, subscribeNewsletter } from './rewards.js';
+import { createSupabaseServer } from './rewards-supabase.js';
+import { dailySeed } from './track.js';
+import { trickLabel } from './engine.js';
 import { createShopBridge } from '../../src/shop-bridge.js';
 import { pickSize } from '../../src/data/catalog.js';
 import { load, save } from '../../src/core/storage.js';
 
 export const wasExited = () => !!load('exited', false);
 export const clearExited = () => save('exited', false);
-export const version = '2d-1';
+export const version = '2d-2';
 
 const SIZE_OPTS = {
   top: ['XS', 'S', 'M', 'L', 'XL', 'XXL'], bottom: ['36', '38', '40', '42', '44', '46'], shoe: ['36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46'],
   protect: ['S', 'M', 'L'], deck: ['7.75', '8', '8.25', '8.5'],
 };
 const DEFAULT = { v: 1, gender: 'f', skin: 0, wear: { head: 11, top: 4, bottom: 8, feet: 14, deck: 20, wheels: 24 }, sizes: { top: 'M', bottom: '40', shoe: '40', protect: 'M', deck: '8.25' },
-  best: 0, unlocked: [], muted: false, music: true, pid: '', rotateOk: false };
+  best: 0, unlocked: [], muted: false, music: true, pid: '', rotateOk: false, mode: 'daily', bestRun: null, streak: 0, email: '', pseudo: '', tickets: 0 };
 const ROWS = [
   { k: 'head', ids: () => CAT.products.filter((p) => p.slot === 'head').map((p) => p.id), none: true },
   { k: 'top', ids: () => byGender('top') }, { k: 'bottom', ids: () => byGender('bottom') }, { k: 'feet', ids: () => slotIds('feet') },
@@ -93,8 +95,13 @@ export async function mount(el, opts = {}) {
   const isLocked = (id) => exclusives.includes(id) && !profile.unlocked.includes(id);
   const profileForBridge = () => ({ sizes: profile.sizes });
   const bridge = createShopBridge({ catalog: CAT, shopUrl, mode: opts.cartMode, onAdd: (d) => emit('cartAdd', d) });
-  const rewards = createRewards(opts.rewards);
+  const did = deviceId();
+  let server = null;
+  try { server = opts.server || (opts.supabase && opts.supabase.url ? createSupabaseServer(opts.supabase) : null); } catch (e) { server = null; }
+  const withTimeout = (p, ms) => Promise.race([Promise.resolve(p), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+  const srv = async (fn, args, ms = 6000) => { if (!server || !server[fn]) return null; try { return await withTimeout(server[fn](args), ms); } catch (e) { return { reason: String((e && e.message) || e), _err: true }; } };
   const challenge = readChallenge();
+  let drawInfo = null;
 
   // --- DOM -------------------------------------------------------------------------------------
   const root = document.createElement('div'); root.className = 'r2d'; root.lang = getLang();
@@ -119,8 +126,8 @@ export async function mount(el, opts = {}) {
   // --- état de la tenue ----------------------------------------------------------------------------
   let vestBag = 0, vestItems = null;
   const engine = createEngine(canvas, {
-    audio, autopilot, exclusives: exclusives.filter((id) => !profile.unlocked.includes(id)), lootPool: CAT.products.filter((p) => !p.exclusive_unlock).map((p) => p.id),
-    hooks: { onTick, onCombo, onHint, onEnd, onCatch },
+    audio, autopilot,
+    hooks: { onTick, onCombo, onHint, onEnd, onCollect },
   });
   const refreshLook = () => engine.setLook(lookOf(profile, context === 'vestiaire' && screen === 'vest' ? vestBag : 0));
 
@@ -181,7 +188,12 @@ export async function mount(el, opts = {}) {
     scroll.append(H('div', { class: 'kicker' }, tryP ? t('tryKicker') : t('kicker')));
     scroll.append(H('h1', { html: tryP ? shortName(tryP) : `${t('title1')}<br>${t('title2')} <i>${t('title3')}</i>` }));
     if (tryP) scroll.append(H('p', { class: 'lead' }, t('tryText')));
-    if (challenge) scroll.append(H('div', { class: 'challenge' }, t('challengeFrom', { name: challenge.n || 'Rider', score: fmt(challenge.sc || 0) })));
+    if (challenge) scroll.append(H('div', { class: 'challenge' }, t('beat', { name: challenge.n || 'Rider', score: fmt(challenge.sc || 0) })));
+    if (!tryP) {
+      const modeSeg = H('div', { class: 'seg', role: 'group', 'aria-label': 'Mode' }, ...['daily', 'free'].map((m) => H('button', { class: profile.mode === m ? 'on' : '', 'aria-pressed': String(profile.mode === m), onClick: () => { profile.mode = m; saveProfile(); renderWardrobe(); audio.SFX.ui(); } }, t(m === 'daily' ? 'modeDaily' : 'modeFree'))));
+      scroll.append(H('div', { class: 'row' }, modeSeg, H('button', { class: 'btn btn-ghost btn-sm', style: 'margin-left:auto', onClick: () => openLeaderboard() }, t('leaderboard'))));
+      scroll.append(drawBox());
+    }
     const seg = H('div', { class: 'seg', role: 'group', 'aria-label': 'Silhouette' }, ...['f', 'm'].map((g) => H('button', { class: profile.gender === g ? 'on' : '', 'aria-pressed': String(profile.gender === g), onClick: () => { profile.gender = g; changed(); } }, t(g === 'f' ? 'women' : 'men'))));
     const skins = H('div', { class: 'skins' }, ...SKINS.map((sk, i) => H('button', { class: profile.skin === i ? 'on' : '', style: 'background:' + sk.s, 'aria-label': t(i ? 'skinDark' : 'skinLight'), 'aria-pressed': String(profile.skin === i), onClick: () => { profile.skin = i; changed(); } })));
     scroll.append(H('div', { class: 'row' }, seg, skins));
@@ -244,35 +256,43 @@ export async function mount(el, opts = {}) {
 
   // --- HUD ----------------------------------------------------------------------------------------
   const hud = H('div', { class: 'hud hidden' });
-  const scoreEl = H('b', {}, '0'), lootEl = H('span', { class: 'h-loot', html: ICON.shop + '<span>0</span>' });
+  const scoreEl = H('b', {}, '0'), lootEl = H('span', { class: 'h-loot', html: '<i class="coin"></i><span>0</span>' }), skateEl = H('span', { class: 'h-skate' }, ...'SKATE'.split('').map((ch) => H('i', {}, ch))), ghostEl = H('span', { class: 'h-ghost hidden' });
   const tbar = H('i'), tsec = H('b', {}, '60');
   const cnames = H('div', { class: 'names' }), cpts = H('b', {}, '0'), cmult = H('span');
   const comboEl = H('div', { class: 'combo idle' }, cnames, H('div', { class: 'pts' }, cpts, cmult));
   const spdN = H('b', {}, '0'), speedo = H('div', { class: 'speedo', role: 'img', 'aria-label': 'km/h' }, H('div', {}, spdN, H('small', {}, 'KM/H')));
   const fx = H('div', { class: 'fx' }), tuto = H('div', { class: 'tuto off' });
-  hud.append(H('div', { class: 'h-score' }, H('small', {}, t('score').toUpperCase()), scoreEl, lootEl), H('div', { class: 'h-time' }, H('div', { class: 'bar' }, tbar), tsec), comboEl, speedo, fx, tuto);
+  hud.append(H('div', { class: 'h-score' }, H('small', {}, t('score').toUpperCase()), scoreEl, H('div', { class: 'h-row' }, lootEl, skateEl), ghostEl), H('div', { class: 'h-time' }, H('div', { class: 'bar' }, tbar), tsec), comboEl, speedo, fx, tuto);
   root.append(hud);
-  let lastSec = -1, lastScore = -1, lastKmh = -1, lastFx = '', tutoT = 0;
+  let lastSec = -1, lastScore = -1, lastKmh = -1, lastFx = '', tutoT = 0, lastCoins = -1, lastLetters = null;
   function onTick(s) {
     if (s.score !== lastScore) { lastScore = s.score; scoreEl.textContent = fmt(s.score); }
     tbar.style.transform = 'scaleX(' + (s.left / RUN_LEN).toFixed(4) + ')';
     const sec = Math.ceil(s.left); if (sec !== lastSec) { lastSec = sec; tsec.textContent = sec; tsec.classList.toggle('low', sec <= 10); }
     const k = Math.round(s.kmh); if (k !== lastKmh) { lastKmh = k; spdN.textContent = k; speedo.style.setProperty('--p', Math.min(1, Math.max(0, (k - 20) / 40)).toFixed(3)); speedo.classList.toggle('hot', k >= 48); }
+    if (s.coins !== lastCoins) { lastCoins = s.coins; lootEl.lastChild.textContent = s.coins; }
+    if (s.letters !== lastLetters) { lastLetters = s.letters; [...skateEl.children].forEach((n) => n.classList.toggle('on', s.letters.includes(n.textContent))); }
+    if (s.ghost != null) { const d = s.score - s.ghost; ghostEl.classList.remove('hidden'); ghostEl.textContent = t('ghostVs') + ' ' + (d >= 0 ? '+' : '−') + fmt(Math.abs(d)); ghostEl.classList.toggle('ahead', d >= 0); } else ghostEl.classList.add('hidden');
     const f = (s.boost ? 'b' : '') + (s.magnet ? 'm' : ''); if (f !== lastFx) { lastFx = f; fx.innerHTML = (s.boost ? '<span>BOOST</span>' : '') + (s.magnet ? '<span class="mag">' + t('magnet').replace(/\s*!$/, '') + '</span>' : ''); }
     if (tutoT > 0) { tutoT -= 1 / 60; if (tutoT <= 0) tuto.classList.add('off'); }
   }
   function onCombo(c, extra) {
-    if (extra && extra.banked != null) { comboEl.classList.add('bank'); cpts.textContent = '+' + fmt(extra.banked); cmult.textContent = ''; setTimeout(() => { comboEl.classList.remove('bank'); if (!engine.G.combo) comboEl.classList.add('idle'); }, 650); return; }
+    if (extra && extra.banked != null) { comboEl.classList.add('bank'); cpts.textContent = '+' + fmt(extra.banked); cmult.textContent = ''; setTimeout(() => { comboEl.classList.remove('bank'); if (!engine.sim.S.combo) comboEl.classList.add('idle'); }, 650); return; }
     if (extra && extra.lost) { comboEl.classList.add('lost'); setTimeout(() => { comboEl.classList.remove('lost'); comboEl.classList.add('idle'); }, 700); return; }
     if (!c) { if (!comboEl.classList.contains('bank') && !comboEl.classList.contains('lost')) comboEl.classList.add('idle'); return; }
     comboEl.classList.remove('idle', 'bank', 'lost'); cnames.textContent = c.names.slice(-5).join(' + '); cpts.textContent = fmt(c.pts); cmult.textContent = '× ' + c.mult;
   }
   const TOUCH = matchMedia('(pointer:coarse)').matches;
   function onHint(k) { const key = 'hint_' + k + (TOUCH && (k === 'ollie' || k === 'flip') ? 'T' : ''); tuto.innerHTML = t(key); tuto.classList.remove('off'); tutoT = 4.2; }
-  function onCatch(e) {
-    const span = lootEl.querySelector('span'); span.textContent = engine.G.loot.length; lootEl.classList.remove('bump'); void lootEl.offsetWidth; lootEl.classList.add('bump');
-    emit('lootCaught', { kind: e.k, id: e.id, tier: e.tier });
-    if (e.k === 'token') emit('tierReached', { tier: e.tier, source: 'token' });
+  // objets du run : pas de produit au panier ; les exclusifs se débloquent par leur objectif
+  // (catalog.json exclusive_unlock : cassette -> 6, gap nommé -> 15, S-K-A-T-E -> 22)
+  function unlock(id) { if (!profile.unlocked.includes(id) && CAT.byId.get(id)) { profile.unlocked.push(id); saveProfile(); emit('exclusiveUnlocked', { id }); emit('objectiveUnlocked', { id: 'exclusive-' + id, first: true, products: [id] }); toast(t('excl') + ' : ' + shortName(CAT.byId.get(id)), 3200); } }
+  function onCollect(kind, it, S) {
+    if (kind === 'letter') { emit('letter', { ch: it.ch, letters: S.letters }); if (S.letters.length === 5) unlock(22); }
+    else if (kind === 'cassette') { emit('cassette', {}); unlock(6); }
+    else if (kind === 'drop') emit('dropCaught', { product_id: it.id });
+    else if (kind === 'dropSpawn') emit('dropSpawn', { product_id: it.id });
+    else if (kind === 'boost' || kind === 'magnet') emit('bonus', { kind });
   }
 
   // --- écrans : pause, rotation, fin, vestiaire ---------------------------------------------------
@@ -309,72 +329,180 @@ export async function mount(el, opts = {}) {
     }
     closeModal(); audio.SFX.go();
     try { if (document.activeElement && root.contains(document.activeElement)) document.activeElement.blur(); } catch (e) { /* rien */ }
-    session = await rewards.session({ referrer: challenge && challenge.r, challengeSeed: challenge && challenge.s, player: profile.pid, lang: getLang() });
+    // défi d'ami : mode libre avec la graine du parrain (run-start accepte `seed`)
+    const mode = challenge ? 'free' : profile.mode;
+    let run = null;
+    if (server) { const r = await srv('runStart', { device_id: did, mode, referrer: challenge && challenge.r ? challenge.r : undefined, seed: challenge ? challenge.s : undefined }, 5000);
+      if (r && r.run_id && r.seed != null) { run = { ...r, online: true }; if (r.player) { if (r.player.ref) profile.ref = r.player.ref; if (r.player.pseudo) profile.pseudo = r.player.pseudo; saveProfile(); } } }
+    if (!run) run = { run_id: null, seed: challenge ? challenge.s : mode === 'daily' ? dailySeed() : ((Math.random() * 2 ** 31) >>> 0) || 1, mode, online: false };
+    if (run.prize) drawInfo = { ...(drawInfo || {}), prize: run.prize, ends_at: run.prize.ends_at || (drawInfo && drawInfo.ends_at) };
+    // fantôme : celui du parrain (défi), sinon mon meilleur run sur cette graine
+    let ghost = null;
+    if (challenge && server && (challenge.run || challenge.r)) { const gh = await srv('ghost', challenge.run ? { run_id: challenge.run } : { ref: challenge.r }, 3500); if (gh && gh.inputs && (gh.seed >>> 0) === (run.seed >>> 0)) ghost = { ...gh, pseudo: gh.pseudo || challenge.n }; }
+    if (!ghost && profile.bestRun && (profile.bestRun.seed >>> 0) === (run.seed >>> 0)) ghost = { ...profile.bestRun, pseudo: profile.pseudo || t('ghost') };
+    session = run;
     engine.wipe(() => {
       screen = 'run'; panel.classList.add('hidden'); keys.classList.add('hidden'); brand.classList.add('hidden'); hud.classList.remove('hidden'); pauseBtn.classList.remove('hidden');
-      lootEl.querySelector('span').textContent = '0'; refreshLook();
-      engine.startRun(session.seed); if (!profile.muted) audio.startMusic();
-      emit('runStart', { runId: session.runId, seed: session.seed, demo: !!session.demo });
+      refreshLook(); engine.setGhostLook(ghostLookOf(profile.gender === 'f' ? 'm' : 'f'));
+      const st = engine.startRun(run.seed, ghost, null, run.drop && run.drop.product_id ? Number(run.drop.product_id) : null); if (!profile.muted) audio.startMusic();
+      emit('runStart', { run_id: run.run_id, seed: run.seed, mode, online: run.online, ghost: st.ghost, drop_product: st.drop });
     });
   }
   function onEnd(res) {
     lastRes = res; screen = 'end'; endAt = performance.now(); audio.stopMusic(); pauseBtn.classList.add('hidden');
-    const rec = res.score > (profile.best || 0) && res.score > 0; if (rec) profile.best = res.score; saveProfile();
-    const runProof = { runId: session && session.runId, ...res.proof };
-    emit('runEnd', { score: res.score, distance: res.distance, topKmh: res.topKmh, loot: res.loot.map((l) => ({ kind: l.k, id: l.id, tier: l.tier })), runId: runProof.runId, demo: !!(session && session.demo) });
-    setTimeout(() => showEnd(res, rec, runProof), 700);
+    const rec = res.score > (profile.best || 0) && res.score > 0;
+    if (rec) profile.best = res.score;
+    const prevRun = profile.bestRun;
+    if (!prevRun || prevRun.seed !== res.proof.seed || res.score > prevRun.score) profile.bestRun = { seed: res.proof.seed, inputs: res.proof.inputs, score: res.score, drop: res.dropId };
+    if (res.proof.events.some((e) => e[1] === 'gap')) unlock(15);
+    saveProfile();
+    if (window.__r2dCheck) { const rp = engine.replay(res.proof.seed, res.proof.inputs, res.dropId); window.__r2dCheck(rp && rp.score === res.score && rp.proof.distance === res.proof.distance, rp, res); }
+    emit('runEnd', { run_id: session && session.run_id, score: res.score, distance: res.proof.distance, max_speed: res.topKmh, coins: res.coins, letters: res.letters, cassette: res.cassette, drop_caught: res.dropCaught, online: !!(session && session.online) });
+    const fin = session && session.online && session.run_id ? srv('runFinish', { run_id: session.run_id, device_id: did, proof: res.proof }, 9000) : Promise.resolve(null);
+    setTimeout(() => showEnd(res, rec, fin), 700);
   }
-  function showEnd(res, rec, runProof) {
+  const fmtDate = (iso) => { try { return new Date(iso).toLocaleDateString(getLang() === 'en' ? 'en-GB' : 'fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) { return iso; } };
+  // fantôme : silhouette bleu pâle, tenue par défaut, couleurs uniformes
+  function ghostLookOf(gender) {
+    const L = lookOf({ ...DEFAULT, gender }, 0), C = ['#A9DDF3', '#7FC0DC', '#E8F8FF'];
+    for (const k of Object.keys(L)) if (L[k] && typeof L[k] === 'object' && L[k].c) L[k] = { ...L[k], c: C };
+    return { ...L, skin: '#D4F1FF', skinSh: '#9FD3EC', hair: '#7FC0DC', lip: '#7FC0DC' };
+  }
+  function drawBox(extra) {
+    const box = H('div', { class: 'drawbox' });
+    const fill = () => {
+      box.innerHTML = '';
+      const d = drawInfo, prize = d && d.prize;
+      if (!prize && !profile.streak) { box.classList.add('hidden'); return; } box.classList.remove('hidden');
+      if (prize && prize.image) box.append(H('img', { src: prize.image, alt: '', loading: 'lazy' }));
+      const tk = d && d.my_tickets != null ? d.my_tickets : null;
+      box.append(H('div', { class: 'txt' }, H('small', {}, t('draw')), H('b', {}, prize ? prize.title : ''),
+        H('span', {}, [d && d.ends_at ? t('drawEnds', { d: fmtDate(d.ends_at) }) : null, tk != null ? t(tk > 1 ? 'ticketsP' : 'tickets', { n: tk }) : null].filter(Boolean).join(' · ')),
+        d && d.eligible === false ? H('span', { class: 'lw' }, t('drawEligible')) : null,
+        d && d.last_winner ? H('span', { class: 'lw' }, t('lastWinner', { p: d.last_winner.pseudo, lot: d.last_winner.prize })) : null));
+      if (profile.streak > 0) box.append(H('div', { class: 'streak', title: t(profile.streak > 1 ? 'streakP' : 'streak', { n: profile.streak }) }, H('i', { html: '<svg viewBox="0 0 24 24"><path d="M12 2c1 4 5 6 5 11a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-6 1-9.5z" fill="#FF6A1A"/><path d="M12 13c1 1.5 2.4 2.3 2.4 4a2.4 2.4 0 0 1-4.8 0c0-1 .5-1.8 1.2-2.4.1.9.6 1.4 1.2 1.4z" fill="#FFD54A"/></svg>' }), H('b', {}, String(profile.streak))));
+      if (extra) box.append(extra);
+    };
+    fill(); box._fill = fill; return box;
+  }
+  async function refreshDraw() { if (!server) return; const d = await srv('drawInfo', { device_id: did }, 5000); if (d && !d._err && (d.prize || d.ends_at)) { drawInfo = d; if (d.my_tickets != null) { profile.tickets = d.my_tickets; saveProfile(); } if (screen === 'wardrobe') renderWardrobe(); } }
+  function showEnd(res, rec, finP) {
     hud.classList.add('hidden');
     const big = H('div', { class: 'big' }, '0');
     const card = H('div', { class: 'card' }, H('div', { class: 'kicker', style: 'margin-top:6px' }, t('endKicker')), big,
       H('div', { style: 'font-size:13px;color:var(--craie2)' }, t('points'), rec ? H('span', { class: 'rec' }, t('record')) : null));
     if (challenge && challenge.sc) { const d = challenge.sc - res.score; card.append(H('div', { class: 'challenge', style: 'margin-top:10px' }, d < 0 ? t('challengeBeat') : t('challengeLost', { d: fmt(d) }))); }
     card.append(H('div', { class: 'stats bd' }, H('div', {}, H('small', {}, t('bdTricks')), H('b', {}, fmt(res.trickScore))), H('div', {}, H('small', {}, t('bdSpeed')), H('b', {}, fmt(res.speedPts))), H('div', {}, H('small', {}, t('bdDist')), H('b', {}, fmt(res.distPts)))));
-    card.append(H('div', { class: 'stats' }, H('div', {}, H('small', {}, t('topSpeed')), H('b', {}, res.topKmh + ' km/h')), H('div', {}, H('small', {}, t('bestCombo')), H('b', {}, fmt(res.bestCombo))), H('div', {}, H('small', {}, t('perfects')), H('b', {}, String(res.perfects)))));
-    if (res.bestNames) card.append(H('div', { class: 'note' }, H('b', {}, t('bestChain') + ' : '), res.bestNames));
-    // récompenses : jeton (meilleur palier), exclusifs, puis le butin
-    const tokens = res.loot.filter((l) => l.k === 'token').sort((a, b) => TIER_RANK[b.tier] - TIER_RANK[a.tier]);
-    if (tokens.length) {
-      const tier = tokens[0].tier, box = H('div', { class: 'reward', style: '--tier:' + TIER_COL[tier] }, H('div', { class: 'coin' }, '%'), H('div', { class: 'lbl' }, t('codeTitle'), H('small', {}, t('tier_' + tier))), H('span', { class: 'note', style: 'margin:0' }, t('codeWait')));
-      card.append(box);
-      rewards.claim({ type: 'code', tier, runProof }).then((r) => {
-        box.lastChild.remove();
-        if (!r || !r.ok || !r.code) { box.append(H('span', { class: 'note', style: 'margin:0' }, (r && r.message) || t('codeFail'))); return; }
-        const code = H('code', { tabindex: '0' }, r.code);
-        const copy = H('button', { class: 'btn btn-ghost btn-sm', onClick: async () => { try { await navigator.clipboard.writeText(r.code); toast(t('codeCopied')); } catch (e) { const rg = document.createRange(); rg.selectNodeContents(code); const s = getSelection(); s.removeAllRanges(); s.addRange(rg); } } }, t('codeCopy'));
-        box.append(code, copy); if (r.label) box.querySelector('.lbl small').textContent = t('tier_' + tier) + ' · ' + r.label;
-        if (r.url) box.append(H('a', { class: 'btn btn-sm btn-ride', href: r.url, target: '_top' }, getLang() === 'en' ? 'Apply' : 'Appliquer'));
-        if (r.demo) box.append(H('div', { class: 'note', style: 'flex-basis:100%;margin:0' }, t('codeDemo')));
-        emit('codeRevealed', { tier, demo: !!r.demo });
-      });
-    }
-    const excl = res.loot.filter((l) => l.k === 'excl');
-    for (const e of excl) {
-      const p = CAT.byId.get(e.id); if (!p) continue;
-      rewards.claim({ type: 'exclusive', id: e.id, runProof }).then((r) => {
-        if (r && r.ok) { if (!profile.unlocked.includes(e.id)) profile.unlocked.push(e.id); saveProfile(); emit('exclusiveUnlocked', { id: e.id, demo: !!r.demo }); emit('objectiveUnlocked', { id: 'exclusive-' + e.id, first: true, products: [e.id] }); }
-      });
-    }
-    const prods = res.loot.filter((l) => l.k === 'prod' || l.k === 'excl');
-    const uniq = [...new Map(prods.map((l) => [l.id, l])).values()];
-    card.append(H('div', { class: 'sect' }, H('h3', {}, t('lootTitle') + ' : ' + t(uniq.length > 1 ? 'lootNP' : 'lootN', { n: uniq.length })),
-      uniq.length > 1 ? H('button', { class: 'btn btn-buy btn-sm', onClick: (ev) => buyOutfit(ev.currentTarget, uniq.map((l) => l.id).filter((id) => !(isLocked(id) && !excl.some((x) => x.id === id)))) }, t('addAll')) : null));
-    if (!uniq.length) card.append(H('div', { class: 'note' }, t('lootEmpty')));
-    else { const list = H('div', { class: 'loot' });
-      for (const l of uniq) { const p = CAT.byId.get(l.id); if (!p) continue; const ex = l.k === 'excl';
-        list.append(H('div', { class: 'lootrow' + (ex ? ' ex' : '') }, iconEl(l.id, 48), H('div', { class: 'nm' }, shortName(p), H('small', {}, (ex ? t('excl') + ' · ' : '') + price(p.price_ttc) + ' · ' + sizeLine(l.id).text)),
-          H('div', { class: 'acts' }, H('button', { class: 'btn btn-ghost btn-sm', onClick: () => { closeModal(); showWardrobe(l.id); } }, t('tryOn')),
-            H('button', { class: 'btn btn-buy btn-sm', onClick: (ev) => buyOutfit(ev.currentTarget, [l.id]) }, getLang() === 'en' ? 'Add' : 'Ajouter')))); }
-      card.append(list);
-      rewards.claim({ type: 'product', ids: uniq.map((l) => l.id), runProof }).catch(() => {});
-    }
+    card.append(H('div', { class: 'stats' }, H('div', {}, H('small', {}, t('topSpeed')), H('b', {}, res.topKmh + ' km/h')), H('div', {}, H('small', {}, 'S-K-A-T-E'), H('b', {}, (res.letters.length + '/5') + (res.cassette ? ' + K7' : ''))), H('div', {}, H('small', {}, t('bestCombo')), H('b', {}, fmt(res.bestCombo)))));
+    if (res.bestNames) card.append(H('div', { class: 'note' }, H('b', {}, t('bestChain') + ' : '), res.bestNames.split(' + ').map(trickLabel).join(' + ')));
+    const status = H('div', { class: 'note' }, session && session.online ? t('codeWait') : t('offline'));
+    const rewardsBox = H('div', { class: 'rewards' }), tick = H('div', { class: 'ticketfx hidden' });
+    card.append(H('div', { class: 'sect' }, H('h3', {}, t('rewardsTitle')), H('button', { class: 'btn btn-ghost btn-sm', onClick: () => openLeaderboard() }, t('leaderboard'))), status, rewardsBox, tick);
+    const dbox = drawBox(); card.append(dbox);
     card.append(H('div', { class: 'endbtns' }, H('button', { class: 'btn btn-ride', onClick: () => startRun(true), html: t('again') + ' <kbd>Espace</kbd>' }), H('button', { class: 'btn btn-ghost', onClick: () => showWardrobe() }, t('wardrobe'))));
-    card.append(H('div', { class: 'sharebtns' }, H('button', { class: 'btn btn-ghost btn-sm', onClick: () => shareCard(res) }, t('share')), H('button', { class: 'btn btn-ghost btn-sm', onClick: () => shareChallenge(res) }, t('challenge'))));
+    card.append(H('div', { class: 'sharebtns' }, H('button', { class: 'btn btn-ghost btn-sm', onClick: () => shareChallenge(res) }, t('challengeFriend')), H('button', { class: 'btn btn-ghost btn-sm', onClick: () => shareCard(res) }, t('share'))));
     const plan = cartPlan();
     card.append(H('div', { class: 'shopline' }, H('span', {}, t('outfit') + ' : ', H('b', {}, t(plan.length > 1 ? 'articlesP' : 'articles', { n: plan.length }) + ' · ' + price(total(plan)))), H('button', { class: 'btn btn-buy btn-sm', onClick: (ev) => buyOutfit(ev.currentTarget) }, t('buyShort'))));
     openModal(card);
     const t0 = performance.now(); const step = () => { const k = Math.min(1, (performance.now() - t0) / 900); big.textContent = fmt(res.score * (1 - (1 - k) * (1 - k))); if (k < 1 && !destroyed) requestAnimationFrame(step); }; step();
+    Promise.resolve(finP).then((f) => {
+      if (destroyed) return;
+      if (!session || !session.online) return;
+      if (!f || f._err) { status.textContent = t('offline'); return; }
+      if (f.accepted === false) { status.textContent = t('refused', { r: f.reason || '?' }); return; }
+      status.textContent = f.ranks ? t('rankLine', { d: f.ranks.day ?? '–', w: f.ranks.week ?? '–' }) : '';
+      if (f.streak != null) { profile.streak = f.streak; saveProfile(); }
+      if (f.tickets_earned > 0) { tick.textContent = t('ticketGain', { n: f.tickets_earned }) + (f.tickets_earned > 1 ? 's' : ''); tick.classList.remove('hidden'); audio.SFX.token(); profile.tickets = (profile.tickets || 0) + f.tickets_earned; if (drawInfo) drawInfo.my_tickets = (drawInfo.my_tickets || 0) + f.tickets_earned; }
+      dbox._fill();
+      const rws = Array.isArray(f.rewards) ? f.rewards : [];
+      if (!rws.length) rewardsBox.append(H('div', { class: 'note' }, t('noReward')));
+      for (const rw of rws) rewardsBox.append(rewardBox(rw));
+      emit('runFinished', { accepted: f.accepted !== false, score: f.score, ranks: f.ranks, tickets_earned: f.tickets_earned, streak: f.streak, rewards: rws.map((r) => ({ kind: r.kind, product_id: r.product_id })) });
+      if (f.needs_pseudo) askPseudo();
+      refreshDraw();
+    });
+  }
+  // une récompense : bouton → formulaire e-mail + cases → claim → code
+  function rewardBox(rw) {
+    const col = { skate: '#C8FF2E', score: '#DDE3EA', drop: '#FFD54A' }[rw.kind] || '#FFD54A';
+    const p = rw.product_id ? CAT.byId.get(Number(rw.product_id)) : null;
+    const box = H('div', { class: 'reward', style: '--tier:' + col }, p ? iconEl(p.id, 42) : H('div', { class: 'coin' }, '%'), H('div', { class: 'lbl' }, rw.label || t('rw_' + rw.kind), H('small', {}, t('rw_' + rw.kind) + (p ? ' · ' + shortName(p) : ''))));
+    const go = H('button', { class: 'btn btn-ride btn-sm', onClick: () => { go.remove(); box.append(form()); } }, t('claimBtn')); box.append(go);
+    function form() {
+      const f = H('form', { class: 'claim', novalidate: true });
+      const email = H('input', { type: 'email', required: true, autocomplete: 'email', placeholder: t('email'), 'aria-label': t('email'), value: profile.email || '' });
+      const nl = H('input', { type: 'checkbox' }); // jamais pré-cochée
+      const ok = H('input', { type: 'checkbox', required: true });
+      const rules = opts.rulesUrl ? H('a', { href: opts.rulesUrl, target: '_blank', rel: 'noopener' }, t('rulesLink')) : H('span', {}, t('rulesLink'));
+      const lbl = H('label', { class: 'chk' }, ok, H('span', {}, ...t('rules', { link: '\u0000' }).split('\u0000').flatMap((x, i) => (i ? [rules, x] : [x]))));
+      const err = H('div', { class: 'err' }), btn = H('button', { class: 'btn btn-ride btn-sm', type: 'submit' }, t('claimGo'));
+      f.append(email, H('label', { class: 'chk' }, nl, H('span', {}, t('newsletter'))), lbl, err, btn);
+      f.addEventListener('submit', async (e) => {
+        e.preventDefault(); err.textContent = '';
+        const em = email.value.trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)) { err.textContent = t('emailBad'); email.focus(); return; }
+        if (!ok.checked) { err.textContent = t('rulesNeeded'); return; }
+        btn.disabled = true; btn.textContent = '…';
+        const r = await srv('claim', { run_id: session.run_id, device_id: did, email: em, newsletter: nl.checked, reward: { kind: rw.kind, ...(rw.product_id ? { product_id: rw.product_id } : {}) } }, 9000);
+        if (!r || !r.ok || !r.code) { btn.disabled = false; btn.textContent = t('claimGo'); const why = (r && r.reason) || '?'; err.textContent = t('claimErr_' + why) !== 'claimErr_' + why ? t('claimErr_' + why) : t('claimErr', { r: why }); return; }
+        profile.email = em; saveProfile();
+        f.replaceWith(codeView(r, p));
+        emit('rewardClaimed', { kind: rw.kind, product_id: rw.product_id || null, newsletter: nl.checked });
+        if (nl.checked) { const n = await subscribeNewsletter(opts.newsletter, em, shopUrl); emit('newsletter', { ok: !!n.ok, reason: n.reason || null }); if (n.ok) toast(t('nlOk'), 5000); }
+      });
+      setTimeout(() => email.focus(), 50);
+      return f;
+    }
+    return box;
+  }
+  function codeView(r, p) {
+    const code = H('code', { tabindex: '0' }, r.code);
+    const copy = H('button', { type: 'button', class: 'btn btn-ghost btn-sm', onClick: async () => { try { await navigator.clipboard.writeText(r.code); toast(t('codeCopied')); } catch (e) { const rg = document.createRange(); rg.selectNodeContents(code); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rg); } } }, t('codeCopy'));
+    return H('div', { class: 'codeview' }, H('div', { class: 'cv-top' }, code, copy),
+      H('div', { class: 'note', style: 'margin:0' }, [r.label, r.value != null ? (typeof r.value === 'number' ? '-' + r.value + ' %' : r.value) : null, r.expires_at ? t('codeValid', { d: fmtDate(r.expires_at) }) : null].filter(Boolean).join(' · ')),
+      H('div', { class: 'cv-acts' }, r.apply_url ? H('a', { class: 'btn btn-ride btn-sm', href: new URL(r.apply_url, new URL(shopUrl, location.href)).href, target: '_top' }, t('applyCart')) : null,
+        p && p.url ? H('a', { class: 'btn btn-ghost btn-sm', href: new URL(p.url, new URL(shopUrl, location.href)).href, target: '_top' }, t('seeProduct')) : null));
+  }
+  function askPseudo() {
+    const input = H('input', { type: 'text', minlength: 3, maxlength: 12, autocomplete: 'nickname', 'aria-label': t('pseudoTitle'), value: profile.pseudo || '' });
+    const err = H('div', { class: 'err' }), btn = H('button', { class: 'btn btn-ride', type: 'submit' }, t('pseudoOk'));
+    const f = H('form', { class: 'claim' }, input, err, btn);
+    const box = H('div', { class: 'pseudobox' }, H('h3', {}, t('pseudoTitle')), H('p', { class: 'note' }, t('pseudoText')), f);
+    const host = modal && modal.querySelector('.card'); if (host) host.insertBefore(box, host.children[3] || null);
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault(); const v = input.value.trim(); if (v.length < 3 || v.length > 12) { err.textContent = t('pseudoErr', { r: '3-12' }); return; }
+      btn.disabled = true; const r = await srv('pseudo', { device_id: did, pseudo: v }, 6000); btn.disabled = false;
+      if (r && r.ok) { profile.pseudo = r.pseudo || v; saveProfile(); box.replaceWith(H('div', { class: 'note' }, '✓ ' + profile.pseudo)); emit('pseudoSet', { pseudo: profile.pseudo }); }
+      else err.textContent = t('pseudoErr', { r: (r && r.reason) || '?' });
+    });
+    setTimeout(() => input.focus(), 60);
+  }
+  // classement : jour / semaine / tout
+  async function openLeaderboard(period = 'day') {
+    const prev = modal ? modal.firstChild : null, prevScreen = screen;
+    const body = H('div', { class: 'lb' }, H('div', { class: 'note' }, server ? t('codeWait') : t('lbOffline')));
+    const tabs = H('div', { class: 'seg' }, ...[['day', 'lbDay'], ['week', 'lbWeek'], ['all', 'lbAll']].map(([k, l]) => H('button', { class: k === period ? 'on' : '', onClick: () => openLeaderboard(k) }, t(l))));
+    const back = H('button', { class: 'btn btn-ghost', onClick: () => { closeModal(); if (prev && prevScreen === 'end') { modal = H('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, prev); root.append(modal); } } }, getLang() === 'en' ? 'Back' : 'Retour');
+    const card = H('div', { class: 'card' }, H('div', { class: 'kicker', style: 'margin-top:6px' }, 'Respawn Street Run'), H('h2', {}, t('leaderboard')), tabs, body, H('div', { class: 'endbtns' }, H('button', { class: 'btn btn-ride', onClick: () => startRun(true) }, t('again')), back));
+    closeModal(); modal = H('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, card); root.append(modal); if (prev) modal._prev = prev;
+    emit('leaderboardOpen', { period });
+    if (!server) return;
+    const d = await srv('leaderboard', { period, device_id: did }, 6000);
+    body.innerHTML = '';
+    if (!d || d._err) { body.append(H('div', { class: 'note' }, t('lbOffline'))); return; }
+    const me = d.me || null, top = d.top || [];
+    if (!top.length) body.append(H('div', { class: 'note' }, t('lbEmpty')));
+    const list = H('ol', { class: 'lblist' });
+    for (const r of top.slice(0, 10)) list.append(H('li', { class: r.me || (me && me.rank === r.rank) ? 'me' : '' }, H('span', { class: 'rk' }, '#' + r.rank), H('span', { class: 'ps' }, r.pseudo || '—', r.badge ? H('em', { class: 'medal ' + r.badge }, '') : null), H('b', {}, fmt(r.score))));
+    body.append(list);
+    if (me && me.rank) {
+      const near = H('ol', { class: 'lblist near' });
+      if (me.above) near.append(H('li', {}, H('span', { class: 'rk' }, '#' + (me.rank - 1)), H('span', { class: 'ps' }, me.above.pseudo), H('b', {}, fmt(me.above.score))));
+      near.append(H('li', { class: 'me' }, H('span', { class: 'rk' }, '#' + me.rank), H('span', { class: 'ps' }, profile.pseudo || (top.find((r) => r.me) || {}).pseudo || me.pseudo || t('lbMe')), H('b', {}, fmt(me.score))));
+      if (me.below) near.append(H('li', {}, H('span', { class: 'rk' }, '#' + (me.rank + 1)), H('span', { class: 'ps' }, me.below.pseudo), H('b', {}, fmt(me.below.score))));
+      body.append(H('div', { class: 'sect' }, H('h3', {}, t('lbMe') + ' : #' + me.rank)), near,
+        H('div', { class: 'challenge' }, me.rank === 1 ? t('lbFirst') : t('lbGap', { d: fmt(d.gap_to_next != null ? d.gap_to_next : me.above ? me.above.score - me.score : 0), r: me.rank - 1 })));
+    }
   }
   // --- partage : carte image + lien de défi ----------------------------------------------------
   function renderCard(res) {
@@ -389,14 +517,15 @@ export async function mount(el, opts = {}) {
     drawRider(x, o, L); x.restore();
     x.textAlign = 'left'; x.fillStyle = ACID; x.font = '64px ' + DISP; x.fillText('RESPAWN', 64, 110); x.fillStyle = CRAIE; x.font = '30px ' + DISP; x.fillText('STREET RUN', 66, 152);
     x.font = '170px ' + DISP; x.fillStyle = CRAIE; x.strokeStyle = INK; x.lineWidth = 14; x.lineJoin = 'round'; const sc = fmt(res.score); x.strokeText(sc, 60, Hc * 0.72 + 190); x.fillText(sc, 60, Hc * 0.72 + 190);
-    x.font = '700 34px "Space Grotesk", system-ui, sans-serif'; x.fillStyle = ACID; x.fillText(`${res.topKmh} km/h · combo ${fmt(res.bestCombo)} · ${res.loot.length} ${getLang() === 'en' ? 'loot' : 'butin'}`, 64, Hc * 0.72 + 250);
-    const ids = [...new Set(res.loot.filter((l) => l.id).map((l) => l.id))].slice(0, 5);
-    ids.forEach((id, i) => { const p = CAT.byId.get(id); if (!p) return; x.save(); x.translate(Wc - 140 - i * 120, 60); x.fillStyle = '#141416'; x.fillRect(0, 0, 110, 110); x.translate(5, 5); drawIcon(x, p, pieceOf(p), CAT.byId); x.restore(); });
+    x.font = '700 34px "Space Grotesk", system-ui, sans-serif'; x.fillStyle = ACID; x.fillText(`${res.topKmh} km/h · combo ${fmt(res.bestCombo)} · S-K-A-T-E ${res.letters.length}/5`, 64, Hc * 0.72 + 250);
+    if (profile.pseudo) { x.font = '44px ' + DISP; x.fillStyle = CRAIE; x.textAlign = 'right'; x.fillText(profile.pseudo.toUpperCase(), Wc - 64, 110); x.textAlign = 'left'; }
     x.font = '700 30px "Space Grotesk", system-ui, sans-serif'; x.fillStyle = CRAIE; x.fillText(getLang() === 'en' ? 'Beat my score →' : 'Bats mon score →', 64, Hc - 50);
     return c;
   }
+  // lien de défi : ref PUBLIC du joueur (jamais le device_id) ; sans ref (hors ligne), pas de parrain
+  const myChallenge = (res) => challengeLink({ seed: res.proof.seed, score: res.score, ref: profile.ref || undefined, name: profile.pseudo || undefined, run: session && session.online ? session.run_id : undefined, shopUrl });
   async function shareCard(res) {
-    const c = renderCard(res), link = challengeLink({ seed: res.seed, score: res.score, ref: profile.pid, shopUrl });
+    const c = renderCard(res), link = myChallenge(res);
     emit('share', { kind: 'card', score: res.score, link });
     const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
     try {
@@ -406,7 +535,7 @@ export async function mount(el, opts = {}) {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'respawn-run.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast(t('pngSaved'));
   }
   async function shareChallenge(res) {
-    const link = challengeLink({ seed: res.seed, score: res.score, ref: profile.pid, shopUrl });
+    const link = myChallenge(res);
     emit('share', { kind: 'challenge', score: res.score, link });
     try { if (TOUCH && navigator.share) { await navigator.share({ url: link, text: t('shareText', { score: fmt(res.score) }) }); return; } await navigator.clipboard.writeText(link); toast(t('copied')); }
     catch (e) { if (e && e.name !== 'AbortError') toast(link, 6000); }
@@ -431,6 +560,7 @@ export async function mount(el, opts = {}) {
   // --- clavier ---------------------------------------------------------------------------------
   function onKeyDown(e) {
     if (destroyed) return;
+    const tg = e.composedPath ? e.composedPath()[0] : e.target; if (tg && /INPUT|TEXTAREA|SELECT/.test(tg.tagName || '')) return;
     if (e.code === 'KeyM' && !e.target.closest?.('input,select,textarea')) { profile.muted = !profile.muted; audio.setMuted(profile.muted); saveProfile(); renderTop(); return; }
     if (screen === 'run') {
       if (e.code === 'Escape' || e.code === 'KeyP') { e.preventDefault(); if (engine.G.paused) resume(); else openPause(); return; }
@@ -458,7 +588,8 @@ export async function mount(el, opts = {}) {
   else showWardrobe();
   engine.start();
   fontsReady.then(() => { if (!destroyed) { engine.rebuild(); if (screen === 'wardrobe') renderWardrobe(); } });
-  emit('ready', { context, version, demoRewards: rewards.demo });
+  emit('ready', { context, version, online: !!server, device_id: did });
+  refreshDraw();
 
   const api = {
     get engine() { return engine; },
@@ -466,6 +597,8 @@ export async function mount(el, opts = {}) {
     pause: () => openPause(),
     openWardrobe: (id) => showWardrobe(id),
     openShop: (id) => showWardrobe(id),
+    openLeaderboard: (p) => openLeaderboard(p),
+    challengeLink: () => (lastRes ? myChallenge(lastRes) : null),
     destroy() {
       if (destroyed) return; destroyed = true;
       engine.destroy(); audio.dispose(); ro.disconnect(); offLang();

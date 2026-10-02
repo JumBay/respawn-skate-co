@@ -18,20 +18,18 @@
 <button id="replay" type="button">▶ Rejouer</button>
 <script type="module">
   // Banc : ?bundle (charge dist/respawn-2d.js au lieu des sources), ?try=<id> (essayage),
-  // ?vest (vestiaire d'un panier d'exemple), ?provider=local (fournisseur de récompenses local,
-  // comme le passera le script de la boutique ; codes FACTICES ici), ?auto (pilote automatique).
+  // ?vest (vestiaire d'un panier d'exemple), ?mock (faux serveur local du contrat :
+  // node 2d/dev/mock-server.mjs), ?auto (pilote automatique). Sans ?mock : mode hors ligne.
   const q = new URLSearchParams(location.search);
   const mod = await import(q.has('bundle') ? '../dist/respawn-2d.js' : './src/main.js');
   const { mount, wasExited, clearExited } = mod;
-  // Exemple de fournisseur local : la boutique passera le sien (ses vrais codes restent hors du dépôt).
-  const TEST_CODES = { bronze: { code: 'TEST-BRONZE', label: '-10 % (test)' }, silver: { code: 'TEST-ARGENT', label: '-15 % (test)' }, gold: { code: 'TEST-OR', label: '-20 % (test)' } };
-  const localRewards = {
-    async session({ challengeSeed } = {}) { return { runId: 'local-' + Date.now(), seed: challengeSeed || ((Math.random() * 2 ** 31) >>> 0) || 1 }; },
-    async claim({ type, tier }) { return type === 'code' ? { ok: true, ...TEST_CODES[tier] } : { ok: true }; },
-  };
   const replay = document.getElementById('replay');
-  const opts = { overlay: true, shopUrl: '/', onEvent: (n, d) => console.info('[respawn]', n, JSON.stringify(d)) };
-  if (q.get('provider') === 'local') opts.rewards = localRewards;
+  const opts = { overlay: true, shopUrl: '/', rulesUrl: '/reglement-du-jeu.html', onEvent: (n, d) => console.info('[respawn]', n, JSON.stringify(d)) };
+  // ?mock : faux serveur local ; ?server=<url du projet> : vrai serveur (URL passée à la main, jamais en dur ici)
+  if (q.has('mock')) Object.assign(opts, { supabase: { url: 'http://127.0.0.1:8787', anonKey: 'mock-anon' } });
+  if (q.get('server')) opts.supabase = { url: q.get('server') };
+  // hors boutique : la newsletter est simulée (sur la boutique, laisser l'option absente = /newsletter.php)
+  opts.newsletter = (email) => (q.has('mock') ? fetch('http://127.0.0.1:8787/newsletter', { method: 'POST', body: new URLSearchParams({ n: email }) }) : Promise.resolve(console.info('[banc] newsletter', email)));
   if (q.has('try')) Object.assign(opts, { tryOn: Number(q.get('try')), remember: false });
   if (q.has('vest')) Object.assign(opts, { remember: false, vestiaire: { items: [{ id: 4, size: 'L', qty: 1 }, { id: 9, size: '40', qty: 1 }, { id: 11, qty: 1 }, { id: 14, size: '40', qty: 1 }, { id: 21, size: '8"', qty: 1 }, { id: 23, qty: 1 }, { id: 1, size: 'M', qty: 2 }, { id: 12, qty: 1 }, { id: 17, size: 'M', qty: 1 }] } });
   if (q.has('auto')) opts.autopilot = true;

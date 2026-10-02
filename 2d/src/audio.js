@@ -43,6 +43,7 @@ export function createAudio({ muted = false, music = true } = {}) {
     buy() { [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.25, 'triangle', 0.14, 0, i * 0.07)); burst(0.5, 'highpass', 5000, 1, 0.08, 9000, 0.2); },
     grindIn() { burst(0.08, 'bandpass', 3200, 5, 0.35); tone(1900, 0.05, 'square', 0.04); },
     go() { tone(440, 0.12, 'square', 0.07); tone(880, 0.25, 'square', 0.07, 0, 0.12); },
+    coin() { tone(1568, 0.06, 'square', 0.05); tone(2093, 0.09, 'square', 0.05, 0, 0.04); },
     loot() { [1047, 1319, 1568].forEach((f, i) => tone(f, 0.16, 'triangle', 0.13, 0, i * 0.045)); },
     token() { [784, 1047, 1319, 1568, 2093].forEach((f, i) => tone(f, 0.3, 'triangle', 0.13, 0, i * 0.06)); burst(0.6, 'highpass', 6000, 1, 0.1, 10000, 0.15); },
     boost() { tone(220, 0.5, 'sawtooth', 0.09, 880); burst(0.5, 'bandpass', 600, 1, 0.25, 4000); },

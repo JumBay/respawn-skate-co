@@ -36,33 +36,34 @@ console. Défi d'ami : lien `#rs=…` (score, pseudo, look, somme de contrôle) 
 ## Jeu 2D : Respawn Street Run (`2d/`, direction retenue)
 
 Skate 2D vue de côté façon OlliOlli : run de 60 s où la vitesse monte avec les figures et les
-PERFECT, objets du catalogue à attraper (butin), jetons promo bronze / argent / or, exclusifs,
-garde-robe avec profil de tailles, vestiaire du panier. Canvas 2D, aucune ressource externe hors
-polices, bundle unique `dist/respawn-2d.js` (~200 Ko, ~59 Ko gzip). **Même API que le 3D** :
+PERFECT ; pièces Respawn, lettres S-K-A-T-E, cassette cachée, boost / aimant, et le DROP (une caisse
+en fin de parcours, un produit de la boutique, code -20 % sur ce produit). Classement (jour /
+semaine / tout), tirage hebdomadaire, série, fantôme, défi d'ami. Garde-robe avec profil de
+tailles, essayage, vestiaire du panier. Canvas 2D, bundle unique `dist/respawn-2d.js`.
+**Même API que le 3D** ; contrat avec le serveur : `../CONTRAT-SERVEUR.md`.
 
 ```js
 import { mount, wasExited, clearExited } from 'https://cdn.jsdelivr.net/gh/JumBay/respawn-skate-co@<commit>/dist/respawn-2d.js';
 const game = await mount(null, {
   overlay: true, shopUrl: '/', onEvent(name, data) {},
-  rewards: provider,         // { session(ctx), claim(req) } asynchrones, voir 2d/src/rewards.js ; absent = mode démo « CODE-DEMO »
-  // tryOn: 12               // fiche produit : garde-robe ouverte, produit porté (« Retour à la fiche »)
-  // vestiaire: { items }    // page panier : [{ id, size, qty }], doublons dans le sac à dos (« Retour au panier »)
-  // remember: false         // « Sortir » ne mémorise pas le choix (hors accueil)
+  supabase: { url: 'https://<ref>.supabase.co' },   // serveur du jeu (clé anon facultative) ; absent = mode hors ligne
+  rulesUrl: '/reglement-du-jeu.html',               // lien « règlement du jeu » du formulaire de gain
+  // newsletter: false | (email) => Promise        // absent = formulaire newsletter de la boutique (/form/token.php + /newsletter.php)
+  // tryOn: 12 | vestiaire: { items } | remember: false   (comme le 3D)
 });
 ```
 
-Aucun code promo n'est dans le bundle : la page injecte un fournisseur `rewards`
-(`session()` au début du run → `{ runId, seed }` ; `claim({ type, tier, id, ids, runProof })` →
-`{ ok, code, label, url, message }`). `runProof` contient la graine, la durée, le score, la
-distance, les objets attrapés horodatés et le journal des entrées. Adaptateur Supabase prêt mais
-non branché : `2d/src/rewards-supabase.js` (schéma proposé en tête de fichier).
+Aucun code promo dans le bundle : les codes ne viennent que de `claim` (après e-mail, case
+règlement obligatoire, case newsletter jamais pré-cochée). Physique à pas fixe (120 Hz) et
+parcours par graine : mêmes graine + entrées = même run (fantôme, vérification serveur).
 Événements (`onEvent` et `window` « respawn:<nom> ») : ready, shopOpen, runStart, runEnd,
-lootCaught, tierReached, codeRevealed, exclusiveUnlocked, objectiveUnlocked, cartAdd, buyOutfit,
-share, pause, exit, destroy. Panier : `src/shop-bridge.js` du 3D, réutilisé tel quel. Défi :
-`?play=1#rs=…` (graine, score à battre, parrain). FR / EN.
+runFinished, letter, cassette, dropSpawn, dropCaught, bonus, rewardClaimed, newsletter,
+pseudoSet, leaderboardOpen, exclusiveUnlocked, objectiveUnlocked, cartAdd, buyOutfit, share,
+pause, exit, destroy. Panier : `src/shop-bridge.js` du 3D, réutilisé tel quel.
 
 ```bash
-npm run dev:2d       # http://localhost:5198 (2d/index.html : ?try=6, ?vest, ?provider=local, ?auto, ?bundle)
+npm run dev:2d       # http://localhost:5198 (2d/index.html : ?mock, ?server=<url>, ?try=6, ?vest, ?auto, ?bundle)
+node 2d/dev/mock-server.mjs   # faux serveur du contrat (rejoue chaque run avec la vraie simulation)
 npm run build:2d     # resynchronise ../catalog.json puis construit dist/respawn-2d.js
 ```
 

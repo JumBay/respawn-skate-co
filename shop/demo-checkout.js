@@ -14,8 +14,11 @@
     '.rsx-demo__kicker{margin:0;font-size:12px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#c8ff2e}' +
     '.rsx-demo__title{margin:8px 0 12px;font:400 clamp(30px,6vw,40px)/1 Anton,Impact,sans-serif;text-transform:uppercase;color:#f3f0e8}' +
     '.rsx-demo__text{margin:0 0 22px;color:#d9d5cb}' +
-    '.rsx-demo__actions{display:flex;flex-wrap:wrap;gap:12px}' +
-    '.rsx-demo__actions .rs-btn{cursor:pointer;min-height:52px;flex:1 1 220px}' +
+    '.rsx-demo__card{width:min(600px,100%)}' +
+    '.rsx-demo__actions{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:stretch}' +
+    '@media (max-width:540px){.rsx-demo__actions{grid-template-columns:1fr}}' +
+    '.rsx-demo__actions .rs-btn{cursor:pointer;min-height:56px;padding:8px 22px;letter-spacing:.08em;font-size:14px;line-height:1.15;white-space:nowrap;flex-direction:column;gap:2px;text-align:center}' +
+    '.rsx-demo__actions .rs-btn small{display:block;font-size:11px;letter-spacing:.06em;text-transform:none;font-weight:500;opacity:.85}' +
     '.rsx-demo__actions .rs-btn--ghost{background:transparent;color:#f3f0e8;border-color:#f3f0e8}' +
     '.rsx-demo__actions .rs-btn:focus-visible{outline:3px solid #c8ff2e;outline-offset:3px}';
 
@@ -37,11 +40,12 @@
     '<p class="rsx-demo__kicker">Respawn Skate Co. · démo</p>' +
     '<h2 id="rsx-demo-title" class="rsx-demo__title">Cette boutique est une démo</h2>' +
     '<p id="rsx-demo-text" class="rsx-demo__text">Respawn Skate Co. a été créée par l’IA avec WiziShop en quelques minutes : catalogue, photos, design, jeu… Tu peux faire pareil pour ta marque.</p>' +
-    '<div class="rsx-demo__actions"><a class="rs-btn" href="' + URL_WZ + '" target="_blank" rel="noopener">Créer ma boutique sur WiziShop</a>' +
+    '<div class="rsx-demo__actions"><a class="rs-btn" href="' + URL_WZ + '" target="_blank" rel="noopener" aria-label="Créer ma boutique sur WiziShop (nouvel onglet)">Créer ma boutique<small>sur WiziShop</small></a>' +
     '<button type="button" class="rs-btn rs-btn--ghost" data-close>Retour au panier</button></div></div>';
   d.body.appendChild(box);
   var card = box.firstChild, back = null;
   function open(from) {
+    if (!box.hidden) return;
     back = from || d.activeElement;
     box.hidden = false;
     var a = box.querySelector('a.rs-btn'); if (a) a.focus();
@@ -63,18 +67,43 @@
   }
   box.addEventListener('click', function (e) { if (e.target === box || e.target.closest('[data-close]')) close(); });
 
-  // tout ce qui mène au tunnel de commande
-  // (« Continuer mes achats » porte aussi .validate-btn : il reste un lien normal vers l'accueil)
+  // Tout ce qui mène au tunnel de commande. Cause du départ vers l'accueil (thème, validation-a/cart.js) :
+  //   $(document.body).on('mousedown', '#cart-validation button', … setTimeout(() => $('.cart-form').submit(), 1000))
+  // Le thème réagit au MOUSEDOWN (pas au clic) et soumet le formulaire du panier 1 s plus tard par
+  // jQuery, sans passer par l'événement submit natif. On arrête donc pointerdown / mousedown /
+  // touchstart / click / Entrée-Espace en phase de capture sur document (avant la délégation du thème
+  // sur body), et, filet de sécurité, form.submit() du formulaire du panier est bloqué pendant que la
+  // fenêtre est concernée. « Continuer mes achats » (.button--continue), quantités, suppression et
+  // code promo ne sont pas touchés.
   var CHECKOUT = 'button.validate-btn, #cart-validation button, .paypal-checkout-btn, a[href*="/order/"], a[href*="commande.html"], a[href*="validation.html"]';
-  d.addEventListener('click', function (e) {
+  var guardUntil = 0;
+  function target(e) {
     var t = e.target && e.target.closest && e.target.closest(CHECKOUT);
-    if (!t || box.contains(t) || t.classList.contains('button--continue')) return;
-    e.preventDefault(); e.stopImmediatePropagation();
-    open(t);
+    if (!t || box.contains(t) || t.classList.contains('button--continue')) return null;
+    return t;
+  }
+  function stop(e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }
+  // (touchstart annulé = plus de mousedown ni de click émulés sur mobile : la fenêtre s'ouvre au touchend)
+  ['pointerdown', 'mousedown', 'touchstart', 'pointerup', 'mouseup', 'touchend'].forEach(function (type) {
+    d.addEventListener(type, function (e) {
+      var t = target(e); if (!t) return;
+      stop(e); guardUntil = Date.now() + 2000;
+      if (type === 'touchend') open(t);
+    }, { capture: true, passive: false });
+  });
+  d.addEventListener('click', function (e) { var t = target(e); if (!t) return; stop(e); guardUntil = Date.now() + 2000; open(t); }, true);
+  d.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var t = target(e); if (!t) return; stop(e); guardUntil = Date.now() + 2000; open(t);
   }, true);
-  // validation au clavier (Entrée dans le formulaire du panier vers le bouton de validation)
   d.addEventListener('submit', function (e) {
     var s = e.submitter;
-    if (s && s.matches && s.matches('button.validate-btn, #cart-validation button')) { e.preventDefault(); e.stopImmediatePropagation(); open(s); }
+    if ((s && s.matches && s.matches('button.validate-btn, #cart-validation button')) || (!s && Date.now() < guardUntil)) { stop(e); if (box.hidden) open(s); }
   }, true);
+  // filet : le thème appelle form.submit() (jQuery) ; refusé pendant la garde, sinon inchangé
+  var forms = d.querySelectorAll('form.cart-form');
+  for (var i = 0; i < forms.length; i++) (function (f) {
+    var native = f.submit;
+    f.submit = function () { if (Date.now() < guardUntil) { try { if (window.jQuery) window.jQuery(f).data('submitted', false); } catch (e) {} return; } return native.apply(f, arguments); };
+  })(forms[i]);
 })();

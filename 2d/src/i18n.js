@@ -52,7 +52,7 @@ const FR = {
   emailBad: 'E-mail invalide.', rulesNeeded: 'Coche l’acceptation du règlement.', codeValid: 'valable jusqu’au {d}', applyCart: 'Appliquer au panier', seeProduct: 'Voir le produit', nlOk: 'Confirme ton inscription dans l’e-mail qu’on vient de t’envoyer.', drawEligible: 'Laisse ton e-mail en récupérant un gain pour participer au tirage.',
   pseudoTitle: 'Ton pseudo', pseudoText: 'Pour apparaître au classement (2 à 12 caractères).', pseudoOk: 'Valider', pseudoErr: 'Pseudo refusé ({r}).',
   pseudo_too_short: 'Pseudo trop court : 2 caractères minimum.', pseudo_too_long: 'Pseudo trop long : 12 caractères maximum.', pseudo_invalid_chars: 'Lettres, chiffres, espace, _ . - seulement.', pseudo_forbidden: 'Ce pseudo n’est pas accepté, choisis-en un autre.', pseudo_taken: 'Ce pseudo est déjà pris.',
-  beat: 'Bats {name} : {score}', challengeFriend: 'Défie un pote', ghostVs: 'Fantôme',
+  beat: 'Bats {name} : {score}', challengeFriend: 'Défie un pote', challengeBest: 'Partage ton meilleur run ({score})', challengeBestShort: 'mon meilleur run', challengeThis: 'Défie un pote avec ce run', challengeThisText: 'Ton ami joue la même piste contre ton fantôme.', copyLink: 'Copier le lien', ghostVs: 'Fantôme',
   rankLine: 'Classement : n° {d} du jour · n° {w} de la semaine',
 };
 const EN = {
@@ -106,7 +106,7 @@ const EN = {
   emailBad: 'Invalid e-mail.', rulesNeeded: 'Please accept the rules.', codeValid: 'valid until {d}', applyCart: 'Apply to cart', seeProduct: 'See the product', nlOk: 'Confirm your sign-up in the e-mail we just sent you.', drawEligible: 'Leave your e-mail when claiming a reward to enter the draw.',
   pseudoTitle: 'Your nickname', pseudoText: 'To appear on the leaderboard (2 to 12 characters).', pseudoOk: 'Save', pseudoErr: 'Nickname refused ({r}).',
   pseudo_too_short: 'Nickname too short: 2 characters minimum.', pseudo_too_long: 'Nickname too long: 12 characters maximum.', pseudo_invalid_chars: 'Letters, digits, space, _ . - only.', pseudo_forbidden: 'This nickname is not allowed, pick another one.', pseudo_taken: 'This nickname is already taken.',
-  beat: 'Beat {name}: {score}', challengeFriend: 'Challenge a friend', ghostVs: 'Ghost',
+  beat: 'Beat {name}: {score}', challengeFriend: 'Challenge a friend', challengeBest: 'Share your best run ({score})', challengeBestShort: 'my best run', challengeThis: 'Challenge a friend with this run', challengeThisText: 'Your friend rides the same track against your ghost.', copyLink: 'Copy link', ghostVs: 'Ghost',
   rankLine: 'Rank: #{d} today · #{w} this week',
 };
 let lang = (() => {

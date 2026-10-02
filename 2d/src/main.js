@@ -22,7 +22,25 @@ import { load, save } from '../../src/core/storage.js';
 
 export const wasExited = () => !!load('exited', false);
 export const clearExited = () => save('exited', false);
-export const version = '2d-2';
+export const version = '2d-3';
+
+// Défi d'ami toujours retrouvable : le meilleur run est gardé en localStorage (clé « respawn:challenge »),
+// le lien se reconstruit à la demande, même hors ligne et sans que le jeu soit monté.
+function bestChallengeLink(shopUrl = '/') {
+  const b = load('challenge', null); if (!b || !b.s) return null;
+  const p = load('p2d', null) || {};
+  return challengeLink({ seed: b.s, score: b.sc, ref: p.ref || b.r || undefined, name: p.pseudo || b.n || undefined, run: b.run || undefined, shopUrl });
+}
+export const getChallengeLink = ({ shopUrl = '/' } = {}) => bestChallengeLink(shopUrl);
+// Pour le bouton flottant de la boutique : partage (mobile) ou copie le lien du meilleur run.
+export async function shareChallenge({ shopUrl = '/', text } = {}) {
+  const link = bestChallengeLink(shopUrl); if (!link) return { ok: false, reason: 'no_run' };
+  const b = load('challenge', null) || {};
+  try { window.dispatchEvent(new CustomEvent('respawn:share', { detail: { kind: 'challenge', score: b.sc, link, from: 'outside' } })); } catch (e) { /* rien */ }
+  const msg = text || t('shareText', { score: fmt(b.sc || 0) });
+  try { if (navigator.share && matchMedia('(pointer:coarse)').matches) { await navigator.share({ url: link, text: msg }); return { ok: true, link, method: 'share' }; } } catch (e) { if (e && e.name === 'AbortError') return { ok: false, link, reason: 'aborted' }; }
+  try { await navigator.clipboard.writeText(link); return { ok: true, link, method: 'clipboard' }; } catch (e) { return { ok: false, link, reason: 'clipboard' }; }
+}
 
 const SIZE_OPTS = {
   top: ['XS', 'S', 'M', 'L', 'XL', 'XXL'], bottom: ['36', '38', '40', '42', '44', '46'], shoe: ['36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46'],
@@ -191,7 +209,9 @@ export async function mount(el, opts = {}) {
     if (challenge) scroll.append(H('div', { class: 'challenge' }, t('beat', { name: challenge.n || 'Rider', score: fmt(challenge.sc || 0) })));
     if (!tryP) {
       const modeSeg = H('div', { class: 'seg', role: 'group', 'aria-label': 'Mode' }, ...['daily', 'free'].map((m) => H('button', { class: profile.mode === m ? 'on' : '', 'aria-pressed': String(profile.mode === m), onClick: () => { profile.mode = m; saveProfile(); renderWardrobe(); audio.SFX.ui(); } }, t(m === 'daily' ? 'modeDaily' : 'modeFree'))));
-      scroll.append(H('div', { class: 'row' }, modeSeg, H('button', { class: 'btn btn-ghost btn-sm', style: 'margin-left:auto', onClick: () => openLeaderboard() }, t('leaderboard'))));
+      const best = load('challenge', null);
+      scroll.append(H('div', { class: 'row' }, modeSeg, H('button', { class: 'btn btn-ghost btn-sm', style: 'margin-left:auto', onClick: () => openLeaderboard() }, t('leaderboard')),
+        best && best.s ? H('button', { class: 'btn btn-buy btn-sm', onClick: () => shareBest(), title: t('challengeBest', { score: fmt(best.sc) }) }, t('challengeFriend')) : null));
       scroll.append(drawBox());
     }
     const seg = H('div', { class: 'seg', role: 'group', 'aria-label': 'Silhouette' }, ...['f', 'm'].map((g) => H('button', { class: profile.gender === g ? 'on' : '', 'aria-pressed': String(profile.gender === g), onClick: () => { profile.gender = g; changed(); } }, t(g === 'f' ? 'women' : 'men'))));
@@ -351,7 +371,7 @@ export async function mount(el, opts = {}) {
   function onEnd(res) {
     lastRes = res; screen = 'end'; endAt = performance.now(); audio.stopMusic(); pauseBtn.classList.add('hidden');
     const rec = res.score > (profile.best || 0) && res.score > 0;
-    if (rec) profile.best = res.score;
+    if (rec) { profile.best = res.score; save('challenge', { s: res.proof.seed, sc: res.score, run: session && session.online ? session.run_id : null, r: profile.ref || null, n: profile.pseudo || null, at: Date.now() }); }
     const prevRun = profile.bestRun;
     if (!prevRun || prevRun.seed !== res.proof.seed || res.score > prevRun.score) profile.bestRun = { seed: res.proof.seed, inputs: res.proof.inputs, score: res.score, drop: res.dropId };
     if (res.proof.events.some((e) => e[1] === 'gap')) unlock(15);
@@ -447,6 +467,9 @@ export async function mount(el, opts = {}) {
         if (!r || !r.ok || !r.code) { btn.disabled = false; btn.textContent = t('claimGo'); const why = (r && r.reason) || '?'; err.textContent = t('claimErr_' + why) !== 'claimErr_' + why ? t('claimErr_' + why) : t('claimErr', { r: why }); return; }
         profile.email = em; saveProfile();
         f.replaceWith(codeView(r, p));
+        if (lastRes && !box.parentNode.querySelector('.chbox')) { const link = myChallenge(lastRes);
+          box.after(H('div', { class: 'chbox' }, H('b', {}, t('challengeThis')), H('span', { class: 'note', style: 'margin:0' }, t('challengeThisText')),
+            H('div', { class: 'cv-acts' }, H('button', { type: 'button', class: 'btn btn-buy btn-sm', onClick: () => shareLink(link, lastRes.score) }, TOUCH && navigator.share ? t('share') : t('copyLink'))))); }
         emit('rewardClaimed', { kind: rw.kind, product_id: rw.product_id || null, newsletter: nl.checked });
         if (nl.checked) { const n = await subscribeNewsletter(opts.newsletter, em, shopUrl); emit('newsletter', { ok: !!n.ok, reason: n.reason || null }); if (n.ok) toast(t('nlOk'), 5000); }
       });
@@ -499,6 +522,7 @@ export async function mount(el, opts = {}) {
       const near = H('ol', { class: 'lblist near' });
       if (me.above) near.append(H('li', {}, H('span', { class: 'rk' }, '#' + (me.rank - 1)), H('span', { class: 'ps' }, me.above.pseudo), H('b', {}, fmt(me.above.score))));
       near.append(H('li', { class: 'me' }, H('span', { class: 'rk' }, '#' + me.rank), H('span', { class: 'ps' }, profile.pseudo || (top.find((r) => r.me) || {}).pseudo || me.pseudo || t('lbMe')), H('b', {}, fmt(me.score))));
+      if (load('challenge', null)) near.append(H('li', { class: 'share' }, H('button', { class: 'btn btn-buy btn-sm', onClick: () => shareBest() }, t('challengeFriend') + ' · ' + t('challengeBestShort'))));
       if (me.below) near.append(H('li', {}, H('span', { class: 'rk' }, '#' + (me.rank + 1)), H('span', { class: 'ps' }, me.below.pseudo), H('b', {}, fmt(me.below.score))));
       body.append(H('div', { class: 'sect' }, H('h3', {}, t('lbMe') + ' : #' + me.rank)), near,
         H('div', { class: 'challenge' }, me.rank === 1 ? t('lbFirst') : t('lbGap', { d: fmt(d.gap_to_next != null ? d.gap_to_next : me.above ? me.above.score - me.score : 0), r: me.rank - 1 })));
@@ -534,9 +558,12 @@ export async function mount(el, opts = {}) {
     } catch (e) { if (e && e.name === 'AbortError') return; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'respawn-run.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast(t('pngSaved'));
   }
-  async function shareChallenge(res) {
-    const link = myChallenge(res);
-    emit('share', { kind: 'challenge', score: res.score, link });
+  async function shareChallenge(res) { return shareLink(myChallenge(res), res.score); }
+  async function shareBest() { const b = load('challenge', null); const link = bestChallengeLink(shopUrl); if (link) return shareLink(link, b.sc); }
+  async function shareLink(link, score) {
+    save('challengeLast', link);
+    emit('share', { kind: 'challenge', score, link });
+    const res = { score };
     try { if (TOUCH && navigator.share) { await navigator.share({ url: link, text: t('shareText', { score: fmt(res.score) }) }); return; } await navigator.clipboard.writeText(link); toast(t('copied')); }
     catch (e) { if (e && e.name !== 'AbortError') toast(link, 6000); }
   }
@@ -599,6 +626,8 @@ export async function mount(el, opts = {}) {
     openShop: (id) => showWardrobe(id),
     openLeaderboard: (p) => openLeaderboard(p),
     challengeLink: () => (lastRes ? myChallenge(lastRes) : null),
+    bestChallengeLink: () => bestChallengeLink(shopUrl),
+    shareChallenge: () => shareBest(),
     destroy() {
       if (destroyed) return; destroyed = true;
       engine.destroy(); audio.dispose(); ro.disconnect(); offLang();

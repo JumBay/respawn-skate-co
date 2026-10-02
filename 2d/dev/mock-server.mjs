@@ -46,7 +46,7 @@ const routes = {
     const b2 = board(), me = b2.find((x) => x.device_id === b.device_id);
     return [200, { accepted: true, score: pr.score, best: p.best, ranks: { day: me && me.rank, week: me && me.rank, all: me && me.rank }, tickets_earned: tickets, streak: p.streak, rewards, needs_pseudo: !p.pseudo }];
   },
-  pseudo(b) { const v = String(b.pseudo || '').trim(); if (v.length < 3 || v.length > 12) return [200, { ok: false, reason: 'length' }]; if (/merde|con\b/i.test(v)) return [200, { ok: false, reason: 'refused' }]; player(b.device_id).pseudo = v; return [200, { ok: true, pseudo: v }]; },
+  pseudo(b) { const v = String(b.pseudo || '').trim(); if (v.length < 2) return [200, { ok: false, reason: 'too_short' }]; if (v.length > 12) return [200, { ok: false, reason: 'too_long' }]; if (/merde|con\b/i.test(v)) return [200, { ok: false, reason: 'refused' }]; player(b.device_id).pseudo = v; return [200, { ok: true, pseudo: v }]; },
   claim(b) {
     const r = runs.get(b.run_id); if (!r || r.device_id !== b.device_id) return [200, { ok: false, reason: 'invalid_reward' }];
     if (b.consent_rules !== true || !/@/.test(b.email || '')) return [200, { ok: false, reason: 'invalid_reward' }];

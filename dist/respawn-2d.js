@@ -2906,9 +2906,14 @@ var U = {
 	nlOk: "Confirme ton inscription dans l’e-mail qu’on vient de t’envoyer.",
 	drawEligible: "Laisse ton e-mail en récupérant un gain pour participer au tirage.",
 	pseudoTitle: "Ton pseudo",
-	pseudoText: "Pour apparaître au classement (3 à 12 caractères).",
+	pseudoText: "Pour apparaître au classement (2 à 12 caractères).",
 	pseudoOk: "Valider",
 	pseudoErr: "Pseudo refusé ({r}).",
+	pseudo_too_short: "Pseudo trop court : 2 caractères minimum.",
+	pseudo_too_long: "Pseudo trop long : 12 caractères maximum.",
+	pseudo_invalid_chars: "Lettres, chiffres, espace, _ . - seulement.",
+	pseudo_forbidden: "Ce pseudo n’est pas accepté, choisis-en un autre.",
+	pseudo_taken: "Ce pseudo est déjà pris.",
 	beat: "Bats {name} : {score}",
 	challengeFriend: "Défie un pote",
 	ghostVs: "Fantôme",
@@ -3100,9 +3105,14 @@ var U = {
 	nlOk: "Confirm your sign-up in the e-mail we just sent you.",
 	drawEligible: "Leave your e-mail when claiming a reward to enter the draw.",
 	pseudoTitle: "Your nickname",
-	pseudoText: "To appear on the leaderboard (3 to 12 characters).",
+	pseudoText: "To appear on the leaderboard (2 to 12 characters).",
 	pseudoOk: "Save",
 	pseudoErr: "Nickname refused ({r}).",
+	pseudo_too_short: "Nickname too short: 2 characters minimum.",
+	pseudo_too_long: "Nickname too long: 12 characters maximum.",
+	pseudo_invalid_chars: "Letters, digits, space, _ . - only.",
+	pseudo_forbidden: "This nickname is not allowed, pick another one.",
+	pseudo_taken: "This nickname is already taken.",
 	beat: "Beat {name}: {score}",
 	challengeFriend: "Challenge a friend",
 	ghostVs: "Ghost",
@@ -5871,7 +5881,7 @@ async function gt(n, a = {}) {
 	function Lt() {
 		let e = M("input", {
 			type: "text",
-			minlength: 3,
+			minlength: 2,
 			maxlength: 12,
 			autocomplete: "nickname",
 			"aria-label": G("pseudoTitle"),
@@ -5883,8 +5893,12 @@ async function gt(n, a = {}) {
 		a && a.insertBefore(i, a.children[3] || null), r.addEventListener("submit", async (r) => {
 			r.preventDefault();
 			let a = e.value.trim();
-			if (a.length < 3 || a.length > 12) {
-				t.textContent = G("pseudoErr", { r: "3-12" });
+			if (a.length < 2) {
+				t.textContent = G("pseudo_too_short");
+				return;
+			}
+			if (a.length > 12) {
+				t.textContent = G("pseudo_too_long");
 				return;
 			}
 			n.disabled = !0;
@@ -5892,7 +5906,11 @@ async function gt(n, a = {}) {
 				device_id: ee,
 				pseudo: a
 			}, 6e3);
-			n.disabled = !1, o && o.ok ? (v.pseudo = o.pseudo || a, b(), i.replaceWith(M("div", { class: "note" }, "✓ " + v.pseudo)), g("pseudoSet", { pseudo: v.pseudo })) : t.textContent = G("pseudoErr", { r: o && o.reason || "?" });
+			if (n.disabled = !1, o && o.ok) v.pseudo = o.pseudo || a, b(), i.replaceWith(M("div", { class: "note" }, "✓ " + v.pseudo)), g("pseudoSet", { pseudo: v.pseudo });
+			else {
+				let e = o && o.reason || "?";
+				t.textContent = G("pseudo_" + e) === "pseudo_" + e ? G("pseudoErr", { r: e }) : G("pseudo_" + e);
+			}
 		}), setTimeout(() => e.focus(), 60);
 	}
 	async function Rt(e = "day") {

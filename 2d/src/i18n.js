@@ -50,7 +50,8 @@ const FR = {
   claimBtn: 'Récupérer mon code', email: 'Ton e-mail', newsletter: 'Je m’inscris à la newsletter Respawn', rules: 'J’accepte le {link}', rulesLink: 'règlement du jeu', claimGo: 'Recevoir le code',
   claimErr_already_claimed: 'Ce gain a déjà été récupéré avec cet e-mail.', claimErr_invalid_reward: 'Ce gain n’est pas valable.', claimErr_rate_limited: 'Trop d’essais, réessaie dans un moment.', claimErr_consent_required: 'Coche l’acceptation du règlement.', claimErr_invalid_email: 'E-mail invalide.', claimErr_out_of_codes: 'Plus de code disponible pour ce gain, désolé.', claimErr: 'Impossible de récupérer le code ({r}).',
   emailBad: 'E-mail invalide.', rulesNeeded: 'Coche l’acceptation du règlement.', codeValid: 'valable jusqu’au {d}', applyCart: 'Appliquer au panier', seeProduct: 'Voir le produit', nlOk: 'Confirme ton inscription dans l’e-mail qu’on vient de t’envoyer.', drawEligible: 'Laisse ton e-mail en récupérant un gain pour participer au tirage.',
-  pseudoTitle: 'Ton pseudo', pseudoText: 'Pour apparaître au classement (3 à 12 caractères).', pseudoOk: 'Valider', pseudoErr: 'Pseudo refusé ({r}).',
+  pseudoTitle: 'Ton pseudo', pseudoText: 'Pour apparaître au classement (2 à 12 caractères).', pseudoOk: 'Valider', pseudoErr: 'Pseudo refusé ({r}).',
+  pseudo_too_short: 'Pseudo trop court : 2 caractères minimum.', pseudo_too_long: 'Pseudo trop long : 12 caractères maximum.', pseudo_invalid_chars: 'Lettres, chiffres, espace, _ . - seulement.', pseudo_forbidden: 'Ce pseudo n’est pas accepté, choisis-en un autre.', pseudo_taken: 'Ce pseudo est déjà pris.',
   beat: 'Bats {name} : {score}', challengeFriend: 'Défie un pote', ghostVs: 'Fantôme',
   rankLine: 'Classement : n° {d} du jour · n° {w} de la semaine',
 };
@@ -103,7 +104,8 @@ const EN = {
   claimBtn: 'Get my code', email: 'Your e-mail', newsletter: 'Sign me up to the Respawn newsletter', rules: 'I accept the {link}', rulesLink: 'game rules', claimGo: 'Get the code',
   claimErr_already_claimed: 'This reward was already claimed with this e-mail.', claimErr_invalid_reward: 'This reward is not valid.', claimErr_rate_limited: 'Too many tries, try again later.', claimErr_consent_required: 'Please accept the rules.', claimErr_invalid_email: 'Invalid e-mail.', claimErr_out_of_codes: 'No code left for this reward, sorry.', claimErr: 'Could not get the code ({r}).',
   emailBad: 'Invalid e-mail.', rulesNeeded: 'Please accept the rules.', codeValid: 'valid until {d}', applyCart: 'Apply to cart', seeProduct: 'See the product', nlOk: 'Confirm your sign-up in the e-mail we just sent you.', drawEligible: 'Leave your e-mail when claiming a reward to enter the draw.',
-  pseudoTitle: 'Your nickname', pseudoText: 'To appear on the leaderboard (3 to 12 characters).', pseudoOk: 'Save', pseudoErr: 'Nickname refused ({r}).',
+  pseudoTitle: 'Your nickname', pseudoText: 'To appear on the leaderboard (2 to 12 characters).', pseudoOk: 'Save', pseudoErr: 'Nickname refused ({r}).',
+  pseudo_too_short: 'Nickname too short: 2 characters minimum.', pseudo_too_long: 'Nickname too long: 12 characters maximum.', pseudo_invalid_chars: 'Letters, digits, space, _ . - only.', pseudo_forbidden: 'This nickname is not allowed, pick another one.', pseudo_taken: 'This nickname is already taken.',
   beat: 'Beat {name}: {score}', challengeFriend: 'Challenge a friend', ghostVs: 'Ghost',
   rankLine: 'Rank: #{d} today · #{w} this week',
 };

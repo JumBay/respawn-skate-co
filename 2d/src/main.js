@@ -464,16 +464,16 @@ export async function mount(el, opts = {}) {
         p && p.url ? H('a', { class: 'btn btn-ghost btn-sm', href: new URL(p.url, new URL(shopUrl, location.href)).href, target: '_top' }, t('seeProduct')) : null));
   }
   function askPseudo() {
-    const input = H('input', { type: 'text', minlength: 3, maxlength: 12, autocomplete: 'nickname', 'aria-label': t('pseudoTitle'), value: profile.pseudo || '' });
+    const input = H('input', { type: 'text', minlength: 2, maxlength: 12, autocomplete: 'nickname', 'aria-label': t('pseudoTitle'), value: profile.pseudo || '' });
     const err = H('div', { class: 'err' }), btn = H('button', { class: 'btn btn-ride', type: 'submit' }, t('pseudoOk'));
     const f = H('form', { class: 'claim' }, input, err, btn);
     const box = H('div', { class: 'pseudobox' }, H('h3', {}, t('pseudoTitle')), H('p', { class: 'note' }, t('pseudoText')), f);
     const host = modal && modal.querySelector('.card'); if (host) host.insertBefore(box, host.children[3] || null);
     f.addEventListener('submit', async (e) => {
-      e.preventDefault(); const v = input.value.trim(); if (v.length < 3 || v.length > 12) { err.textContent = t('pseudoErr', { r: '3-12' }); return; }
+      e.preventDefault(); const v = input.value.trim(); if (v.length < 2) { err.textContent = t('pseudo_too_short'); return; } if (v.length > 12) { err.textContent = t('pseudo_too_long'); return; }
       btn.disabled = true; const r = await srv('pseudo', { device_id: did, pseudo: v }, 6000); btn.disabled = false;
       if (r && r.ok) { profile.pseudo = r.pseudo || v; saveProfile(); box.replaceWith(H('div', { class: 'note' }, '✓ ' + profile.pseudo)); emit('pseudoSet', { pseudo: profile.pseudo }); }
-      else err.textContent = t('pseudoErr', { r: (r && r.reason) || '?' });
+      else { const why = (r && r.reason) || '?'; err.textContent = t('pseudo_' + why) !== 'pseudo_' + why ? t('pseudo_' + why) : t('pseudoErr', { r: why }); }
     });
     setTimeout(() => input.focus(), 60);
   }

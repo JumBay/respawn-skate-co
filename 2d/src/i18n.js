@@ -114,14 +114,16 @@ const EN = {
   rankLine: 'Rank: #{d} today · #{w} this week',
 };
 let lang = (() => {
-  const saved = load('lang', null); if (saved === 'fr' || saved === 'en') return saved;
+  // seul un clic explicite sur EN / FR est mémorisé (respawn:langChoice) ; l'ancienne clé « lang »,
+  // qu'une version précédente remplissait par détection automatique, est ignorée
+  const saved = load('langChoice', null); if (saved === 'fr' || saved === 'en') return saved;
   return 'fr'; // la boutique est en français : l'anglais seulement sur choix explicite (mémorisé)
 })();
 const subs = new Set();
 export const getLang = () => lang;
 // langue par défaut fournie par la page (option de mount `lang`), sans écraser un choix du joueur
-export function setDefaultLang(l) { if (load('lang', null) == null && (l === 'fr' || l === 'en')) { lang = l; subs.forEach((f) => f(lang)); } }
-export function setLang(l) { lang = l === 'en' ? 'en' : 'fr'; save('lang', lang); subs.forEach((f) => f(lang)); }
+export function setDefaultLang(l) { if (load('langChoice', null) == null && (l === 'fr' || l === 'en')) { lang = l; subs.forEach((f) => f(lang)); } }
+export function setLang(l) { lang = l === 'en' ? 'en' : 'fr'; save('langChoice', lang); subs.forEach((f) => f(lang)); }
 export const onLang = (f) => { subs.add(f); return () => subs.delete(f); };
 export function t(k, v) { let s = (lang === 'en' ? EN : FR)[k] ?? FR[k] ?? k; if (v) for (const [a, b] of Object.entries(v)) s = s.replaceAll('{' + a + '}', b); return s; }
 export const fmt = (n) => Math.round(n).toLocaleString(lang === 'en' ? 'en-US' : 'fr-FR').replace(/ | /g, ' ');

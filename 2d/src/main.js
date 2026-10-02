@@ -119,6 +119,11 @@ export async function mount(el, opts = {}) {
   const withTimeout = (p, ms) => Promise.race([Promise.resolve(p), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
   const srv = async (fn, args, ms = 6000) => { if (!server || !server[fn]) return null; try { return await withTimeout(server[fn](args), ms); } catch (e) { return { reason: String((e && e.message) || e), _err: true }; } };
   const challenge = readChallenge();
+  // UN seul « meilleur » : avec serveur, le meilleur run ACCEPTÉ (celui du défi et du fantôme) ;
+  // hors ligne, le meilleur local. Migration : un défi local sans run_id (ancienne version ou hors
+  // ligne) ne vaut rien en ligne, il est oublié.
+  if (server) { const b = load('challenge', null); if (b && !b.run) save('challenge', null); }
+  const bestScore = () => { if (server) { const b = load('challenge', null); return b && b.run ? b.sc || 0 : 0; } return profile.best || 0; };
   // défi d'ami : fantôme du parrain préchargé, jamais remplacé par le fantôme local (sauf son propre lien)
   const ch = { ghost: null, state: challenge ? 'loading' : 'none', own: !!(challenge && profile.ref && challenge.r === profile.ref) };
   const chName = () => (challenge && (challenge.n || (ch.ghost && ch.ghost.pseudo))) || t('aRider');
@@ -209,7 +214,7 @@ export async function mount(el, opts = {}) {
     // en-tête collant : aperçu du skater (fenêtre étroite), pseudo, onglets
     const mini = H('canvas', { class: 'mini', 'aria-hidden': 'true' });
     const pbar = H('div', { class: 'pbar' }, profile.pseudo
-      ? [H('b', {}, profile.pseudo), profile.best ? H('span', {}, ' · ' + t('pseudoBest', { s: fmt(profile.best) })) : null, ' · ', H('button', { class: 'lnk', onClick: () => openPseudo() }, t('pseudoEdit'))]
+      ? [H('b', {}, profile.pseudo), bestScore() ? H('span', {}, ' · ' + t('pseudoBest', { s: fmt(bestScore()) })) : null, ' · ', H('button', { class: 'lnk', onClick: () => openPseudo() }, t('pseudoEdit'))]
       : [H('button', { class: 'lnk', onClick: () => openPseudo() }, t('pseudoNone'))]);
     const tabs = H('nav', { class: 'tabs', 'aria-label': t('kicker') });
     const phead = H('div', { class: 'phead' }, H('div', { class: 'prow' }, mini, H('div', { class: 'pcol' }, pbar, tabs)));
@@ -409,8 +414,8 @@ export async function mount(el, opts = {}) {
   }
   function onEnd(res) {
     lastRes = res; screen = 'end'; endAt = performance.now(); audio.stopMusic(); pauseBtn.classList.add('hidden');
-    const rec = res.score > (profile.best || 0) && res.score > 0;
-    if (rec) profile.best = res.score;
+    const rec = res.score > bestScore() && res.score > 0;
+    if (rec && !(session && session.online)) profile.best = res.score;
     if (!(session && session.online)) { const b = load('challenge', null); if (!b || res.score > (b.sc || 0)) save('challenge', { s: res.proof.seed, sc: res.score, run: null, r: null, n: profile.pseudo || null, at: Date.now() }); }
     const prevRun = profile.bestRun;
     if (!prevRun || prevRun.seed !== res.proof.seed || res.score > prevRun.score) profile.bestRun = { seed: res.proof.seed, inputs: res.proof.inputs, score: res.score, drop: res.dropId };

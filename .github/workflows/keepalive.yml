@@ -1,0 +1,14 @@
+# Garde éveillé le serveur Supabase gratuit du jeu (mis en pause après 7 jours sans activité).
+# Un simple GET public, sans aucun secret : la fonction keepalive fait une lecture en base.
+name: keepalive serveur du jeu
+on:
+  schedule:
+    - cron: "17 6 * * *"   # chaque jour, 06:17 UTC
+  workflow_dispatch:
+permissions: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: curl -fsS --retry 3 --retry-delay 20 https://wkbwrtoffmffxahohdhz.supabase.co/functions/v1/keepalive

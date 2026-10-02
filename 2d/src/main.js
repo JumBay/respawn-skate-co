@@ -106,7 +106,6 @@ export async function mount(el, opts = {}) {
   // --- profil (localStorage protégé, préfixe respawn:) -----------------------------------------
   const stored = load('p2d', null) || {};
   const profile = { ...structuredClone(DEFAULT), ...stored, wear: { ...DEFAULT.wear, ...(stored.wear || {}) }, sizes: { ...DEFAULT.sizes, ...(stored.sizes || {}) } };
-  if (!profile.pid) profile.pid = Math.random().toString(36).slice(2, 10);
   profileRef = profile;
   const saveProfile = () => save('p2d', profile);
   const exclusives = CAT.products.filter((p) => p.exclusive_unlock).map((p) => p.id);
@@ -119,6 +118,9 @@ export async function mount(el, opts = {}) {
   const withTimeout = (p, ms) => Promise.race([Promise.resolve(p), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
   const srv = async (fn, args, ms = 6000) => { if (!server || !server[fn]) return null; try { return await withTimeout(server[fn](args), ms); } catch (e) { return { reason: String((e && e.message) || e), _err: true }; } };
   const challenge = readChallenge();
+  // défi d'ami : fantôme du parrain préchargé, jamais remplacé par le fantôme local (sauf son propre lien)
+  const ch = { ghost: null, state: challenge ? 'loading' : 'none', own: !!(challenge && profile.ref && challenge.r === profile.ref) };
+  const chName = () => (challenge && (challenge.n || (ch.ghost && ch.ghost.pseudo))) || t('aRider');
   let drawInfo = null;
 
   // --- DOM -------------------------------------------------------------------------------------
@@ -206,7 +208,7 @@ export async function mount(el, opts = {}) {
     scroll.append(H('div', { class: 'kicker' }, tryP ? t('tryKicker') : t('kicker')));
     scroll.append(H('h1', { html: tryP ? shortName(tryP) : `${t('title1')}<br>${t('title2')} <i>${t('title3')}</i>` }));
     if (tryP) scroll.append(H('p', { class: 'lead' }, t('tryText')));
-    if (challenge) scroll.append(H('div', { class: 'challenge' }, t('beat', { name: challenge.n || 'Rider', score: fmt(challenge.sc || 0) })));
+    if (challenge) scroll.append(H('div', { class: 'challenge' }, ch.own ? t('chOwn') : t('beat', { name: chName(), score: fmt(challenge.sc || 0) }), H('div', { style: 'font-weight:600;font-size:12px;opacity:.85;margin-top:2px' }, ch.state === 'ok' ? t('chGhostOk') : ch.state === 'loading' ? t('chGhostLoading') : t('chGhostMissing'))));
     if (!tryP) {
       const modeSeg = H('div', { class: 'seg', role: 'group', 'aria-label': 'Mode' }, ...['daily', 'free'].map((m) => H('button', { class: profile.mode === m ? 'on' : '', 'aria-pressed': String(profile.mode === m), onClick: () => { profile.mode = m; saveProfile(); renderWardrobe(); audio.SFX.ui(); } }, t(m === 'daily' ? 'modeDaily' : 'modeFree'))));
       const best = load('challenge', null);
@@ -284,6 +286,7 @@ export async function mount(el, opts = {}) {
   const fx = H('div', { class: 'fx' }), tuto = H('div', { class: 'tuto off' });
   hud.append(H('div', { class: 'h-score' }, H('small', {}, t('score').toUpperCase()), scoreEl, H('div', { class: 'h-row' }, lootEl, skateEl), ghostEl), H('div', { class: 'h-time' }, H('div', { class: 'bar' }, tbar), tsec), comboEl, speedo, fx, tuto);
   root.append(hud);
+  let ghostName = '';
   let lastSec = -1, lastScore = -1, lastKmh = -1, lastFx = '', tutoT = 0, lastCoins = -1, lastLetters = null;
   function onTick(s) {
     if (s.score !== lastScore) { lastScore = s.score; scoreEl.textContent = fmt(s.score); }
@@ -292,7 +295,7 @@ export async function mount(el, opts = {}) {
     const k = Math.round(s.kmh); if (k !== lastKmh) { lastKmh = k; spdN.textContent = k; speedo.style.setProperty('--p', Math.min(1, Math.max(0, (k - 20) / 40)).toFixed(3)); speedo.classList.toggle('hot', k >= 48); }
     if (s.coins !== lastCoins) { lastCoins = s.coins; lootEl.lastChild.textContent = s.coins; }
     if (s.letters !== lastLetters) { lastLetters = s.letters; [...skateEl.children].forEach((n) => n.classList.toggle('on', s.letters.includes(n.textContent))); }
-    if (s.ghost != null) { const d = s.score - s.ghost; ghostEl.classList.remove('hidden'); ghostEl.textContent = t('ghostVs') + ' ' + (d >= 0 ? '+' : '−') + fmt(Math.abs(d)); ghostEl.classList.toggle('ahead', d >= 0); } else ghostEl.classList.add('hidden');
+    if (s.ghost != null) { const d = s.score - s.ghost; ghostEl.classList.remove('hidden'); ghostEl.textContent = t('vsName', { name: ghostName }) + ' : ' + (d >= 0 ? '+' : '−') + fmt(Math.abs(d)); ghostEl.classList.toggle('ahead', d >= 0); } else ghostEl.classList.add('hidden');
     const f = (s.boost ? 'b' : '') + (s.magnet ? 'm' : ''); if (f !== lastFx) { lastFx = f; fx.innerHTML = (s.boost ? '<span>BOOST</span>' : '') + (s.magnet ? '<span class="mag">' + t('magnet').replace(/\s*!$/, '') + '</span>' : ''); }
     if (tutoT > 0) { tutoT -= 1 / 60; if (tutoT <= 0) tuto.classList.add('off'); }
   }
@@ -321,13 +324,13 @@ export async function mount(el, opts = {}) {
   function openModal(card, cls) { closeModal(); modal = H('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, card); if (cls) modal.classList.add(cls); root.append(modal); const f = card.querySelector('button'); if (f) try { f.focus({ preventScroll: true }); } catch (e) { /* rien */ } return modal; }
   function openPause() {
     if (screen !== 'run' || engine.G.paused) return;
-    engine.setPaused(true); audio.SFX.pause(); audio.stopMusic(); emit('pause', {});
+    engine.setPaused(true); audio.SFX.pause(); audio.stopMusic(); audio.loops(0, 0, 0); setTimeout(() => { if (engine.G.paused) audio.suspend(); }, 160); emit('pause', {});
     const musicBtn = H('button', { class: 'btn btn-ghost', onClick: () => { profile.music = !profile.music; audio.setMusic(profile.music); saveProfile(); musicBtn.textContent = t(profile.music ? 'musicOn' : 'musicOff'); } }, t(profile.music ? 'musicOn' : 'musicOff'));
     openModal(H('div', { class: 'card small' }, H('h2', {}, t('pause')), H('p', {}, t('controls')),
       H('div', { class: 'stack' }, H('button', { class: 'btn btn-ride', onClick: resume }, t('resume')), H('button', { class: 'btn btn-ghost', onClick: () => { closeModal(); startRun(true); } }, t('restart')),
         musicBtn, H('button', { class: 'btn btn-ghost', onClick: () => { closeModal(); showWardrobe(); } }, t('wardrobe')))));
   }
-  function resume() { closeModal(); engine.setPaused(false); if (!profile.muted) audio.startMusic(); }
+  function resume() { closeModal(); engine.setPaused(false); audio.unlock(); if (!profile.muted) audio.startMusic(); }
   function showWardrobe(focusId) {
     screen = 'wardrobe'; closeModal(); hud.classList.add('hidden'); pauseBtn.classList.add('hidden'); brand.classList.remove('hidden'); panel.classList.remove('hidden'); keys.classList.remove('hidden');
     audio.stopMusic(); audio.loops(0, 0, 0);
@@ -358,8 +361,13 @@ export async function mount(el, opts = {}) {
     if (run.prize) drawInfo = { ...(drawInfo || {}), prize: run.prize, ends_at: run.prize.ends_at || (drawInfo && drawInfo.ends_at) };
     // fantôme : celui du parrain (défi), sinon mon meilleur run sur cette graine
     let ghost = null;
-    if (challenge && server && (challenge.run || challenge.r)) { const gh = await srv('ghost', challenge.run ? { run_id: challenge.run } : { ref: challenge.r }, 3500); if (gh && gh.inputs && (gh.seed >>> 0) === (run.seed >>> 0)) ghost = { ...gh, pseudo: gh.pseudo || challenge.n }; }
-    if (!ghost && profile.bestRun && (profile.bestRun.seed >>> 0) === (run.seed >>> 0)) ghost = { ...profile.bestRun, pseudo: profile.pseudo || t('ghost') };
+    if (challenge) {
+      if (ch.state === 'loading') await chReady;
+      if (ch.ghost && (ch.ghost.seed >>> 0) === (run.seed >>> 0)) ghost = { ...ch.ghost, pseudo: chName() };
+      else if (ch.own && profile.bestRun && (profile.bestRun.seed >>> 0) === (run.seed >>> 0)) ghost = { ...profile.bestRun, pseudo: profile.pseudo || t('ghost') };
+      if (!ghost) setTimeout(() => toast(t('chGhostMissing'), 4000), 900);
+    } else if (profile.bestRun && (profile.bestRun.seed >>> 0) === (run.seed >>> 0)) ghost = { ...profile.bestRun, pseudo: profile.pseudo || t('ghost') };
+    ghostName = ghost ? (challenge ? chName() : ghost.pseudo || t('ghost')) : '';
     session = run;
     engine.wipe(() => {
       screen = 'run'; panel.classList.add('hidden'); keys.classList.add('hidden'); brand.classList.add('hidden'); hud.classList.remove('hidden'); pauseBtn.classList.remove('hidden');
@@ -371,7 +379,8 @@ export async function mount(el, opts = {}) {
   function onEnd(res) {
     lastRes = res; screen = 'end'; endAt = performance.now(); audio.stopMusic(); pauseBtn.classList.add('hidden');
     const rec = res.score > (profile.best || 0) && res.score > 0;
-    if (rec) { profile.best = res.score; save('challenge', { s: res.proof.seed, sc: res.score, run: session && session.online ? session.run_id : null, r: profile.ref || null, n: profile.pseudo || null, at: Date.now() }); }
+    if (rec) profile.best = res.score;
+    if (!(session && session.online)) { const b = load('challenge', null); if (!b || res.score > (b.sc || 0)) save('challenge', { s: res.proof.seed, sc: res.score, run: null, r: null, n: profile.pseudo || null, at: Date.now() }); }
     const prevRun = profile.bestRun;
     if (!prevRun || prevRun.seed !== res.proof.seed || res.score > prevRun.score) profile.bestRun = { seed: res.proof.seed, inputs: res.proof.inputs, score: res.score, drop: res.dropId };
     if (res.proof.events.some((e) => e[1] === 'gap')) unlock(15);
@@ -411,7 +420,7 @@ export async function mount(el, opts = {}) {
     const big = H('div', { class: 'big' }, '0');
     const card = H('div', { class: 'card' }, H('div', { class: 'kicker', style: 'margin-top:6px' }, t('endKicker')), big,
       H('div', { style: 'font-size:13px;color:var(--craie2)' }, t('points'), rec ? H('span', { class: 'rec' }, t('record')) : null));
-    if (challenge && challenge.sc) { const d = challenge.sc - res.score; card.append(H('div', { class: 'challenge', style: 'margin-top:10px' }, d < 0 ? t('challengeBeat') : t('challengeLost', { d: fmt(d) }))); }
+    if (challenge && challenge.sc && !ch.own) { const d = challenge.sc - res.score; card.append(H('div', { class: 'challenge chend', style: 'margin-top:10px' }, H('b', {}, d < 0 ? t('chWon', { name: chName() }) : t('chLost', { name: chName(), d: fmt(d) })), H('button', { class: 'btn btn-buy btn-sm', onClick: () => shareChallenge(res) }, t('chResend')))); }
     card.append(H('div', { class: 'stats bd' }, H('div', {}, H('small', {}, t('bdTricks')), H('b', {}, fmt(res.trickScore))), H('div', {}, H('small', {}, t('bdSpeed')), H('b', {}, fmt(res.speedPts))), H('div', {}, H('small', {}, t('bdDist')), H('b', {}, fmt(res.distPts)))));
     card.append(H('div', { class: 'stats' }, H('div', {}, H('small', {}, t('topSpeed')), H('b', {}, res.topKmh + ' km/h')), H('div', {}, H('small', {}, 'S-K-A-T-E'), H('b', {}, (res.letters.length + '/5') + (res.cassette ? ' + K7' : ''))), H('div', {}, H('small', {}, t('bestCombo')), H('b', {}, fmt(res.bestCombo)))));
     if (res.bestNames) card.append(H('div', { class: 'note' }, H('b', {}, t('bestChain') + ' : '), res.bestNames.split(' + ').map(trickLabel).join(' + ')));
@@ -430,6 +439,7 @@ export async function mount(el, opts = {}) {
       if (!session || !session.online) return;
       if (!f || f._err) { status.textContent = t('offline'); return; }
       if (f.accepted === false) { status.textContent = t('refused', { r: f.reason || '?' }); return; }
+      { const b = load('challenge', null); if (!b || !b.run || res.score > (b.sc || 0)) save('challenge', { s: res.proof.seed, sc: res.score, run: session.run_id, r: profile.ref || null, n: profile.pseudo || null, at: Date.now() }); }
       status.textContent = f.ranks ? t('rankLine', { d: f.ranks.day ?? '–', w: f.ranks.week ?? '–' }) : '';
       if (f.streak != null) { profile.streak = f.streak; saveProfile(); }
       if (f.tickets_earned > 0) { tick.textContent = t('ticketGain', { n: f.tickets_earned }) + (f.tickets_earned > 1 ? 's' : ''); tick.classList.remove('hidden'); audio.SFX.token(); profile.tickets = (profile.tickets || 0) + f.tickets_earned; if (drawInfo) drawInfo.my_tickets = (drawInfo.my_tickets || 0) + f.tickets_earned; }
@@ -486,16 +496,23 @@ export async function mount(el, opts = {}) {
       H('div', { class: 'cv-acts' }, r.apply_url ? H('a', { class: 'btn btn-ride btn-sm', href: new URL(r.apply_url, new URL(shopUrl, location.href)).href, target: '_top' }, t('applyCart')) : null,
         p && p.url ? H('a', { class: 'btn btn-ghost btn-sm', href: new URL(p.url, new URL(shopUrl, location.href)).href, target: '_top' }, t('seeProduct')) : null));
   }
-  function askPseudo() {
+  function ensurePseudo(then) {
+    if (!server || profile.pseudo) return then();
+    const card = H('div', { class: 'card small' }, H('h2', {}, t('pseudoTitle')), H('p', {}, t('pseudoBeforeShare')));
+    const prev = modal ? modal.firstChild : null;
+    closeModal(); modal = H('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, card); root.append(modal);
+    askPseudo(card, () => { closeModal(); if (prev) { modal = H('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, prev); root.append(modal); } then(); });
+  }
+  function askPseudo(hostCard, onDone) {
     const input = H('input', { type: 'text', minlength: 2, maxlength: 12, autocomplete: 'nickname', 'aria-label': t('pseudoTitle'), value: profile.pseudo || '' });
     const err = H('div', { class: 'err' }), btn = H('button', { class: 'btn btn-ride', type: 'submit' }, t('pseudoOk'));
     const f = H('form', { class: 'claim' }, input, err, btn);
     const box = H('div', { class: 'pseudobox' }, H('h3', {}, t('pseudoTitle')), H('p', { class: 'note' }, t('pseudoText')), f);
-    const host = modal && modal.querySelector('.card'); if (host) host.insertBefore(box, host.children[3] || null);
+    const host = hostCard || (modal && modal.querySelector('.card')); if (host) { if (hostCard) host.append(box); else host.insertBefore(box, host.children[3] || null); }
     f.addEventListener('submit', async (e) => {
       e.preventDefault(); const v = input.value.trim(); if (v.length < 2) { err.textContent = t('pseudo_too_short'); return; } if (v.length > 12) { err.textContent = t('pseudo_too_long'); return; }
       btn.disabled = true; const r = await srv('pseudo', { device_id: did, pseudo: v }, 6000); btn.disabled = false;
-      if (r && r.ok) { profile.pseudo = r.pseudo || v; saveProfile(); box.replaceWith(H('div', { class: 'note' }, '✓ ' + profile.pseudo)); emit('pseudoSet', { pseudo: profile.pseudo }); }
+      if (r && r.ok) { profile.pseudo = r.pseudo || v; saveProfile(); { const b = load('challenge', null); if (b) save('challenge', { ...b, n: profile.pseudo }); } box.replaceWith(H('div', { class: 'note' }, '✓ ' + profile.pseudo)); emit('pseudoSet', { pseudo: profile.pseudo }); if (onDone) onDone(); }
       else { const why = (r && r.reason) || '?'; err.textContent = t('pseudo_' + why) !== 'pseudo_' + why ? t('pseudo_' + why) : t('pseudoErr', { r: why }); }
     });
     setTimeout(() => input.focus(), 60);
@@ -558,8 +575,8 @@ export async function mount(el, opts = {}) {
     } catch (e) { if (e && e.name === 'AbortError') return; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'respawn-run.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast(t('pngSaved'));
   }
-  async function shareChallenge(res) { return shareLink(myChallenge(res), res.score); }
-  async function shareBest() { const b = load('challenge', null); const link = bestChallengeLink(shopUrl); if (link) return shareLink(link, b.sc); }
+  async function shareChallenge(res) { ensurePseudo(() => shareLink(myChallenge(res), res.score)); }
+  async function shareBest() { ensurePseudo(() => { const b = load('challenge', null); const link = bestChallengeLink(shopUrl); if (link) shareLink(link, b.sc); }); }
   async function shareLink(link, score) {
     save('challengeLast', link);
     emit('share', { kind: 'challenge', score, link });
@@ -601,12 +618,14 @@ export async function mount(el, opts = {}) {
   }
   const onKeyUp = (e) => engine.onKeyUp(e);
   window.addEventListener('keydown', onKeyDown); window.addEventListener('keyup', onKeyUp);
-  const onVis = () => { if (document.hidden) { engine.stop(); audio.suspend(); if (screen === 'run') openPause(); } else { engine.start(); audio.resume(); } };
+  const onVis = () => { if (document.hidden) { engine.stop(); audio.loops(0, 0, 0); audio.suspend(); if (screen === 'run') openPause(); } else engine.start(); };
+  const onBlur = () => { audio.loops(0, 0, 0); audio.suspend(); if (screen === 'run' && !engine.G.paused) openPause(); };
+  const onGameInput = () => { if (!destroyed && (screen === 'run' || screen === 'wardrobe' || screen === 'end')) audio.unlock(); };
+  window.addEventListener('blur', onBlur); root.addEventListener('pointerdown', onGameInput); root.addEventListener('keydown', onGameInput);
   document.addEventListener('visibilitychange', onVis);
   const ro = new ResizeObserver(() => { engine.resize(); if (screen === 'wardrobe' || screen === 'vest') engine.setSceneRect(sceneRect()); });
   ro.observe(root);
   const offLang = onLang(() => { root.lang = getLang(); renderTop(); if (screen === 'wardrobe') renderWardrobe(); });
-  document.addEventListener('pointerdown', () => audio.unlock(), { once: true });
 
   // --- démarrage -------------------------------------------------------------------------------
   renderTop(); engine.resize();
@@ -616,6 +635,25 @@ export async function mount(el, opts = {}) {
   engine.start();
   fontsReady.then(() => { if (!destroyed) { engine.rebuild(); if (screen === 'wardrobe') renderWardrobe(); } });
   emit('ready', { context, version, online: !!server, device_id: did });
+  function challengeLanding() {
+    const status = H('p', {}, ch.state === 'ok' ? t('chGhostOk') : ch.state === 'loading' ? t('chGhostLoading') : t('chGhostMissing'));
+    const card = H('div', { class: 'card small chland' }, H('div', { class: 'kicker', style: 'margin-top:6px' }, t('chKicker')),
+      H('h2', {}, ch.own ? t('chOwnTitle') : t('chTitle', { name: chName() })), H('div', { class: 'big', style: 'font-size:56px' }, fmt(challenge.sc || 0)), H('div', { class: 'note' }, t('points')), status);
+    if (ch.own) card.append(H('p', {}, t('chOwn')), H('button', { class: 'btn btn-buy', style: 'width:100%;margin-bottom:10px', onClick: () => shareBest() }, t('challengeFriend')));
+    card.append(H('div', { class: 'stack' }, H('button', { class: 'btn btn-ride', onClick: () => startRun() }, ch.own ? t('chOwnPlay') : t('chAccept')), H('button', { class: 'btn btn-ghost', onClick: () => closeModal() }, t('wardrobe'))));
+    if (context === 'home' && screen === 'wardrobe') openModal(card);
+    return status;
+  }
+  let chStatusEl = null;
+  const chReady = challenge ? (async () => {
+    if (server && (challenge.run || challenge.r)) { const gh = await srv('ghost', challenge.run ? { run_id: challenge.run } : { ref: challenge.r }, 5000); if (gh && Array.isArray(gh.inputs) && gh.inputs.length) ch.ghost = gh; }
+    ch.state = ch.ghost && (ch.ghost.seed >>> 0) === challenge.s ? 'ok' : 'missing';
+    if (chStatusEl) chStatusEl.textContent = ch.state === 'ok' ? t('chGhostOk') : t('chGhostMissing');
+    const h1 = modal && modal.querySelector('.chland h2'); if (h1 && !ch.own) h1.textContent = t('chTitle', { name: chName() });
+    if (screen === 'wardrobe') renderWardrobe();
+    emit('challengeOpen', { own: ch.own, ghost: ch.state === 'ok', score: challenge.sc });
+  })() : Promise.resolve();
+  if (challenge && context === 'home') chStatusEl = challengeLanding();
   refreshDraw();
 
   const api = {
@@ -625,13 +663,15 @@ export async function mount(el, opts = {}) {
     openWardrobe: (id) => showWardrobe(id),
     openShop: (id) => showWardrobe(id),
     openLeaderboard: (p) => openLeaderboard(p),
+    audioState: () => ({ state: audio.state, music: audio.musicPlaying }),
+    audioContext: () => audio.context,
     challengeLink: () => (lastRes ? myChallenge(lastRes) : null),
     bestChallengeLink: () => bestChallengeLink(shopUrl),
     shareChallenge: () => shareBest(),
     destroy() {
       if (destroyed) return; destroyed = true;
       engine.destroy(); audio.dispose(); ro.disconnect(); offLang();
-      window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); document.removeEventListener('visibilitychange', onVis); window.removeEventListener('blur', onBlur);
       host.remove(); if (layer) { layer.remove(); document.documentElement.style.overflow = prevOverflow || ''; }
       emit('destroy', {});
     },

@@ -1,8 +1,9 @@
 // Son synthétisé (WebAudio) : boucles de roulement / grind / vent, bruitages, et une musique
 // générée (boucle hip-hop lo-fi : batterie, basse, nappes) planifiée à l'avance. Tout coupable.
 export function createAudio({ muted = false, music = true } = {}) {
-  let c = null, master, musicBus, noise, roll, grind, wind, sched = 0, nextBeat = 0, step = 0, musicOn = music, isMuted = muted, playing = false;
+  let disposed = false, c = null, master, musicBus, noise, roll, grind, wind, sched = 0, nextBeat = 0, step = 0, musicOn = music, isMuted = muted, playing = false;
   function init() {
+    if (disposed) return false;
     if (c) return true;
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return false;
     try { c = new AC(); } catch (e) { return false; }
@@ -72,7 +73,7 @@ export function createAudio({ muted = false, music = true } = {}) {
       step++;
     }
   }
-  function startMusic() { if (!c || playing) return; playing = true; nextBeat = c.currentTime + 0.05; step = 0; clearInterval(sched); sched = setInterval(schedule, 60); }
+  function startMusic() { if (!c || playing || disposed) return; playing = true; nextBeat = c.currentTime + 0.05; step = 0; clearInterval(sched); sched = setInterval(schedule, 60); }
   function stopMusic() { playing = false; clearInterval(sched); }
   return {
     unlock, loops, SFX: new Proxy(SFX, { get: (o, k) => (...a) => { if (c && !isMuted && o[k]) o[k](...a); } }),
@@ -81,7 +82,9 @@ export function createAudio({ muted = false, music = true } = {}) {
     setMusic(on) { musicOn = on; if (musicBus) musicBus.gain.setTargetAtTime(on ? 0.55 : 0, c.currentTime, 0.1); },
     suspend() { if (c && c.state === 'running') c.suspend().catch(() => {}); },
     resume() { if (c && c.state === 'suspended') c.resume().catch(() => {}); },
-    dispose() { stopMusic(); if (c) try { c.close(); } catch (e) { /* rien */ } c = null; },
+    dispose() { disposed = true; stopMusic(); const ctx = c; c = null; if (ctx) { try { ctx.close(); } catch (e) { /* rien */ } } return ctx; },
+    // état de l'AudioContext ('none' tant qu'aucun son n'a été débloqué) : tests et diagnostic
+    get state() { return c ? c.state : disposed ? 'closed' : 'none'; }, get context() { return c; }, get musicPlaying() { return playing; },
     get muted() { return isMuted; }, get music() { return musicOn; },
   };
 }

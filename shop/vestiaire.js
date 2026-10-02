@@ -2,13 +2,15 @@
 // À côté du panier intact : un encart « ton skater porte ton panier » (pièces portées, doublons
 // dans le sac à dos), et à la demande le jeu en mode vestiaire. Chargé par un petit script de la
 // boutique sur la page panier seulement. Lit les lignes du panier sans jamais les modifier.
-// Récompenses : fournisseur `window.RespawnRewards` posé par la page (aucun code promo dans ce dépôt).
+// Réglages : `window.RespawnGame = { bundle, options }` posé par la page (bundle épinglé, serveur
+// Supabase, règlement) ; aucun code promo ni secret ici ni dans la page.
 (function () {
   // servi par jsDelivr depuis le même commit que le jeu : le bundle et le catalogue se déduisent de l'adresse de ce fichier
   var SELF = (document.currentScript && document.currentScript.src) || '';
   var BASE = SELF.replace(/\/shop\/vestiaire\.js.*$/, '');
   // le jeu retenu est le 2D (Respawn Street Run) ; le 3D (dist/respawn.js) n'est plus chargé
-  var BUNDLE = BASE + '/dist/respawn-2d.js';
+  var CFG = window.RespawnGame || {};
+  var BUNDLE = CFG.bundle || (BASE + '/dist/respawn-2d.js');
   // le catalogue du jeu (même commit que le bundle), chargé sur la page panier seulement
   var CATALOG = BASE + '/public/catalog.json';
   var CAT = {}, BYID = {};
@@ -92,7 +94,10 @@
     btn.addEventListener('click', function () {
       btn.disabled = true;
       import(BUNDLE).then(function (m) {
-        m.mount(null, { overlay: true, shopUrl: '/', vestiaire: { items: readCart() }, remember: false, rewards: window.RespawnRewards });
+        var o = {}, k, base = CFG.options || {};
+        for (k in base) o[k] = base[k];
+        o.overlay = true; o.shopUrl = o.shopUrl || '/'; o.vestiaire = { items: readCart() }; o.remember = false;
+        m.mount(null, o);
       }).catch(function () {}).then(function () { btn.disabled = false; });
     });
   }

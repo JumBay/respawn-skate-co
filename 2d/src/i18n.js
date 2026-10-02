@@ -41,7 +41,8 @@ const FR = {
   hint_kick: 'Garde appuyé sur le tremplin : <em>décollage géant</em> (le DROP est tout en haut !)',
   perfect: 'PERFECT !', good: 'BIEN', sketchy: 'LIMITE', caught: 'RATTRAPÉ', ouch: 'AÏE !', respawn: 'RESPAWN', respawnSub: 'on ne lâche rien', timeUp: 'TEMPS !', go: 'GO !', goSub: '60 secondes', combo: 'COMBO', steps: '{n} marches', boost: 'BOOST !', magnet: 'AIMANT !', paused: 'PAUSE',
   demoMode: 'mode démo',
-  aRider: 'Un rider', chKicker: 'Défi', chTitle: '{name} te défie', chOwnTitle: 'Ton propre défi', chGhostOk: 'Son fantôme roule avec toi.', chGhostLoading: 'Recherche de son fantôme…', chGhostMissing: 'Fantôme indisponible, bats juste son score.', chAccept: 'Relever le défi', chOwn: 'C’est ton propre défi : envoie-le à un pote.', chOwnPlay: 'Rider contre mon meilleur fantôme', vsName: 'vs {name}', chWon: 'Défi gagné contre {name} !', chLost: 'Défi perdu contre {name} : il te manquait {d} points.', chResend: 'Renvoyer le défi', pseudoBeforeShare: 'Choisis ton pseudo : ton ami verra qui le défie.',
+  aRider: 'Un rider', pseudoNone: 'Choisis ton pseudo', pseudoBest: 'meilleur {s}', pseudoEdit: 'modifier', tab_sizes: 'Tailles',
+  chPanelTitle: 'Défie un pote', chPanelPreview: 'Ce que verra ton pote', chPanelText: 'Ton pote joue ton meilleur run contre ton fantôme. S’il te bat, il peut te renvoyer le défi.', chCopy: 'Copier', chShare: 'Partager', chNoRun: 'Fais d’abord un run : ton meilleur score sera le défi.', close: 'Fermer', chKicker: 'Défi', chTitle: '{name} te défie', chOwnTitle: 'Ton propre défi', chGhostOk: 'Son fantôme roule avec toi.', chGhostLoading: 'Recherche de son fantôme…', chGhostMissing: 'Fantôme indisponible, bats juste son score.', chAccept: 'Relever le défi', chOwn: 'C’est ton propre défi : envoie-le à un pote.', chOwnPlay: 'Rider contre mon meilleur fantôme', vsName: 'vs {name}', chWon: 'Défi gagné contre {name} !', chLost: 'Défi perdu contre {name} : il te manquait {d} points.', chResend: 'Renvoyer le défi', pseudoBeforeShare: 'Choisis ton pseudo : ton ami verra qui le défie.',
   dropSub: 'une caisse t’attend en hauteur', dropCaught: 'DROP ATTRAPÉ !', skateDone: 'S-K-A-T-E complet !', cassette: 'CASSETTE !', ghost: 'fantôme',
   modeDaily: 'Défi du jour', modeFree: 'Libre', leaderboard: 'Classement', lbDay: 'Jour', lbWeek: 'Semaine', lbAll: 'Tout', lbMe: 'Ta place', lbGap: 'à {d} points du n° {r}', lbFirst: 'Tu es n° 1 !', lbEmpty: 'Pas encore de score sur cette période.', lbOffline: 'Classement indisponible hors ligne.',
   draw: 'Tirage de la semaine', drawEnds: 'tirage le {d}', tickets: '{n} ticket', ticketsP: '{n} tickets', ticketGain: '+{n} ticket', streak: '{n} jour d’affilée', streakP: '{n} jours d’affilée', lastWinner: 'Dernier gagnant : {p} ({lot})',
@@ -96,7 +97,8 @@ const EN = {
   hint_kick: 'Hold on the kicker: <em>giant launch</em> (the DROP is way up!)',
   perfect: 'PERFECT!', good: 'NICE', sketchy: 'SKETCHY', caught: 'SLOPPY', ouch: 'OUCH!', respawn: 'RESPAWN', respawnSub: 'never give up', timeUp: 'TIME!', go: 'GO!', goSub: '60 seconds', combo: 'COMBO', steps: '{n} stairs', boost: 'BOOST!', magnet: 'MAGNET!', paused: 'PAUSED',
   demoMode: 'demo mode',
-  aRider: 'A rider', chKicker: 'Challenge', chTitle: '{name} challenges you', chOwnTitle: 'Your own challenge', chGhostOk: 'Their ghost rides with you.', chGhostLoading: 'Looking for their ghost…', chGhostMissing: 'Ghost unavailable, just beat their score.', chAccept: 'Take the challenge', chOwn: 'This is your own challenge: send it to a friend.', chOwnPlay: 'Ride against my best ghost', vsName: 'vs {name}', chWon: 'Challenge won against {name}!', chLost: 'Challenge lost against {name}: {d} points short.', chResend: 'Send the challenge back', pseudoBeforeShare: 'Pick your nickname: your friend will see who challenges them.',
+  aRider: 'A rider', pseudoNone: 'Pick your nickname', pseudoBest: 'best {s}', pseudoEdit: 'edit', tab_sizes: 'Sizes',
+  chPanelTitle: 'Challenge a friend', chPanelPreview: 'What your friend will see', chPanelText: 'Your friend rides your best run against your ghost. If they beat you, they can send the challenge back.', chCopy: 'Copy', chShare: 'Share', chNoRun: 'Do a run first: your best score becomes the challenge.', close: 'Close', chKicker: 'Challenge', chTitle: '{name} challenges you', chOwnTitle: 'Your own challenge', chGhostOk: 'Their ghost rides with you.', chGhostLoading: 'Looking for their ghost…', chGhostMissing: 'Ghost unavailable, just beat their score.', chAccept: 'Take the challenge', chOwn: 'This is your own challenge: send it to a friend.', chOwnPlay: 'Ride against my best ghost', vsName: 'vs {name}', chWon: 'Challenge won against {name}!', chLost: 'Challenge lost against {name}: {d} points short.', chResend: 'Send the challenge back', pseudoBeforeShare: 'Pick your nickname: your friend will see who challenges them.',
   dropSub: 'a crate is waiting up high', dropCaught: 'DROP CAUGHT!', skateDone: 'S-K-A-T-E complete!', cassette: 'CASSETTE!', ghost: 'ghost',
   modeDaily: 'Daily challenge', modeFree: 'Free', leaderboard: 'Leaderboard', lbDay: 'Day', lbWeek: 'Week', lbAll: 'All time', lbMe: 'Your rank', lbGap: '{d} points behind #{r}', lbFirst: 'You are #1!', lbEmpty: 'No score yet for this period.', lbOffline: 'Leaderboard unavailable offline.',
   draw: 'Weekly draw', drawEnds: 'draw on {d}', tickets: '{n} ticket', ticketsP: '{n} tickets', ticketGain: '+{n} ticket', streak: '{n} day streak', streakP: '{n} day streak', lastWinner: 'Last winner: {p} ({lot})',
@@ -113,10 +115,12 @@ const EN = {
 };
 let lang = (() => {
   const saved = load('lang', null); if (saved === 'fr' || saved === 'en') return saved;
-  return /^fr/i.test(navigator.language || 'fr') ? 'fr' : 'en';
+  return 'fr'; // la boutique est en français : l'anglais seulement sur choix explicite (mémorisé)
 })();
 const subs = new Set();
 export const getLang = () => lang;
+// langue par défaut fournie par la page (option de mount `lang`), sans écraser un choix du joueur
+export function setDefaultLang(l) { if (load('lang', null) == null && (l === 'fr' || l === 'en')) { lang = l; subs.forEach((f) => f(lang)); } }
 export function setLang(l) { lang = l === 'en' ? 'en' : 'fr'; save('lang', lang); subs.forEach((f) => f(lang)); }
 export const onLang = (f) => { subs.add(f); return () => subs.delete(f); };
 export function t(k, v) { let s = (lang === 'en' ? EN : FR)[k] ?? FR[k] ?? k; if (v) for (const [a, b] of Object.entries(v)) s = s.replaceAll('{' + a + '}', b); return s; }

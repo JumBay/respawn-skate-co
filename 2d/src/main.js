@@ -11,7 +11,7 @@ import { createEngine, RUN_LEN } from './engine.js';
 import { createAudio } from './audio.js';
 import { drawIcon, drawRider, drawBoardPlan, DISP, ACID, CRAIE, INK } from './draw.js';
 import { CAT, pieceOf, lookOf, dressFromItems, shortName, SKINS, PROTECT_SLOTS, MOUNT_SLOTS } from './looks.js';
-import { t, getLang, setLang, onLang, fmt, price } from './i18n.js';
+import { t, getLang, setLang, setDefaultLang, onLang, fmt, price } from './i18n.js';
 import { deviceId, readChallenge, challengeLink, subscribeNewsletter } from './rewards.js';
 import { createSupabaseServer } from './rewards-supabase.js';
 import { dailySeed } from './track.js';
@@ -84,6 +84,7 @@ function loadFonts() {
 
 export async function mount(el, opts = {}) {
   const shopUrl = opts.shopUrl || '/';
+  if (opts.lang) setDefaultLang(opts.lang);
   const context = opts.vestiaire ? 'vestiaire' : opts.tryOn ? 'tryOn' : 'home';
   const qs = new URLSearchParams(location.search);
   const autopilot = !!opts.autopilot || qs.has('auto');
@@ -205,6 +206,13 @@ export async function mount(el, opts = {}) {
     const tryP = context === 'tryOn' ? CAT.byId.get(Number(opts.tryOn)) : null;
     panel.innerHTML = '';
     const scroll = H('div', { class: 'panel-scroll' });
+    // en-tête collant : aperçu du skater (fenêtre étroite), pseudo, onglets
+    const mini = H('canvas', { class: 'mini', 'aria-hidden': 'true' });
+    const pbar = H('div', { class: 'pbar' }, profile.pseudo
+      ? [H('b', {}, profile.pseudo), profile.best ? H('span', {}, ' · ' + t('pseudoBest', { s: fmt(profile.best) })) : null, ' · ', H('button', { class: 'lnk', onClick: () => openPseudo() }, t('pseudoEdit'))]
+      : [H('button', { class: 'lnk', onClick: () => openPseudo() }, t('pseudoNone'))]);
+    const tabs = H('nav', { class: 'tabs', 'aria-label': t('kicker') });
+    const phead = H('div', { class: 'phead' }, H('div', { class: 'prow' }, mini, H('div', { class: 'pcol' }, pbar, tabs)));
     scroll.append(H('div', { class: 'kicker' }, tryP ? t('tryKicker') : t('kicker')));
     scroll.append(H('h1', { html: tryP ? shortName(tryP) : `${t('title1')}<br>${t('title2')} <i>${t('title3')}</i>` }));
     if (tryP) scroll.append(H('p', { class: 'lead' }, t('tryText')));
@@ -220,7 +228,7 @@ export async function mount(el, opts = {}) {
     const skins = H('div', { class: 'skins' }, ...SKINS.map((sk, i) => H('button', { class: profile.skin === i ? 'on' : '', style: 'background:' + sk.s, 'aria-label': t(i ? 'skinDark' : 'skinLight'), 'aria-pressed': String(profile.skin === i), onClick: () => { profile.skin = i; changed(); } })));
     scroll.append(H('div', { class: 'row' }, seg, skins));
     // tailles
-    const sz = H('details', { class: 'sizes' }); if (load('sizesOpen', root.clientWidth >= 600)) sz.open = true;
+    const sz = H('details', { class: 'sizes', 'data-sec': 'sizes' }); if (load('sizesOpen', root.clientWidth >= 600)) sz.open = true;
     sz.addEventListener('toggle', () => save('sizesOpen', sz.open));
     const sum = Object.entries(profile.sizes).map(([k, v]) => (k === 'deck' ? v + '"' : v)).join(' · ');
     sz.append(H('summary', {}, t('sizes'), H('small', {}, sum)));
@@ -234,7 +242,7 @@ export async function mount(el, opts = {}) {
     // emplacements
     for (const row of ROWS) {
       const ids = row.ids(); if (!ids.length) continue;
-      const d = H('div', { class: 'slot' });
+      const d = H('div', { class: 'slot', 'data-sec': row.k });
       let info = { text: '', cls: '' };
       if (!row.multi && !row.pack) { const cur = profile.wear[row.k]; info = cur ? { ...sizeLine(cur), text: shortName(CAT.byId.get(cur)) + ' · ' + sizeLine(cur).text } : { text: t('none'), cls: '' }; if (cur && isLocked(cur)) info = { text: t('lockedHint'), cls: 'warn' }; }
       else if (row.multi) { const on = ids.filter((id) => profile.wear[CAT.byId.get(id).slot] === id); info = { text: on.length ? on.map((id) => sizeLine(id).text).join(' · ') : t('none'), cls: '' }; }
@@ -254,11 +262,34 @@ export async function mount(el, opts = {}) {
       H('div', { class: 'total' }, H('span', {}, t('outfit') + ' : ', H('b', {}, t(n > 1 ? 'articlesP' : 'articles', { n }))), H('span', { class: 'eur' }, price(total(plan)))),
       H('div', { class: 'ctas' }, H('button', { class: 'btn btn-buy', id: 'buy', onClick: (e) => buyOutfit(e.currentTarget) }, t('buy')),
         H('button', { class: 'btn btn-ride', onClick: () => startRun(), html: t('ride') + ' ' + ICON.play })));
-    panel.append(scroll, foot);
+    panel.append(phead, scroll, foot);
     keys.textContent = t('keysHint');
+    for (const sec of scroll.querySelectorAll('[data-sec]')) { const k = sec.dataset.sec;
+      tabs.append(H('button', { 'data-k': k, onClick: () => { if (k === 'sizes') sec.open = true; scroll.scrollTo({ top: sec.offsetTop - scroll.offsetTop - 6, behavior: 'smooth' }); } }, k === 'sizes' ? t('tab_sizes') : t('slot_' + k))); }
+    const markTab = () => { let cur = null; for (const sec of scroll.querySelectorAll('[data-sec]')) if (sec.offsetTop - scroll.offsetTop - 30 <= scroll.scrollTop) cur = sec.dataset.sec;
+      for (const b of tabs.children) b.classList.toggle('on', b.dataset.k === cur); };
+    scroll.addEventListener('scroll', markTab, { passive: true }); setTimeout(markTab, 0);
+    drawMini(mini);
     scroll.scrollTop = scrollMem; scroll.addEventListener('scroll', () => { scrollMem = scroll.scrollTop; });
   }
   let scrollMem = 0;
+  function drawMini(cv) {
+    const d = Math.min(window.devicePixelRatio || 1, 2), w = 92, h = 118; cv.width = w * d; cv.height = h * d;
+    const x = cv.getContext('2d'); x.scale(d, d); const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#4A1E5C'); g.addColorStop(1, '#E25A4E'); x.fillStyle = g; x.fillRect(0, 0, w, h);
+    x.fillStyle = '#2A2A2E'; x.fillRect(0, h - 12, w, 12);
+    const L = lookOf(profile, 0); x.save(); x.translate(w / 2 - 8, h - 12); x.scale(0.62, 0.62);
+    x.save(); x.translate(50, -52); x.rotate(-Math.PI / 2 + 0.1); drawBoardPlan(x, L); x.restore();
+    drawRider(x, { hip: { x: 0, y: -75 }, lean: -0.02, fb: { x: -17, y: 0 }, ff: { x: 17, y: 0 }, hb: { x: -22, y: -68 }, eb: 'out', hf: { x: 43, y: -106 }, ef: 'down', tilt: 0, shoeAng: 0, board: { show: 0 }, pony: { x: 0, y: 0 }, blink: 0, smile: true }, L);
+    x.restore();
+  }
+  // pseudo : saisie à la demande (barre du haut de la garde-robe)
+  function openPseudo(then) {
+    const card = H('div', { class: 'card small' }, H('h2', {}, t('pseudoTitle')), H('p', {}, t('pseudoText')));
+    const prev = modal ? modal.firstChild : null;
+    closeModal(); modal = H('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, card); root.append(modal);
+    card.append(H('button', { class: 'btn btn-ghost btn-sm', style: 'margin-top:10px;width:100%', onClick: () => { closeModal(); if (prev) { modal = H('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, prev); root.append(modal); } } }, t('close')));
+    askPseudo(card, () => { closeModal(); if (prev) { modal = H('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, prev); root.append(modal); } if (screen === 'wardrobe') renderWardrobe(); if (then) then(); });
+  }
   function changed() { saveProfile(); refreshLook(); renderWardrobe(); engine.hop(); audio.unlock(); audio.SFX.ui(); }
   async function buyOutfit(btn, ids) {
     audio.unlock();
@@ -479,7 +510,7 @@ export async function mount(el, opts = {}) {
         f.replaceWith(codeView(r, p));
         if (lastRes && !box.parentNode.querySelector('.chbox')) { const link = myChallenge(lastRes);
           box.after(H('div', { class: 'chbox' }, H('b', {}, t('challengeThis')), H('span', { class: 'note', style: 'margin:0' }, t('challengeThisText')),
-            H('div', { class: 'cv-acts' }, H('button', { type: 'button', class: 'btn btn-buy btn-sm', onClick: () => shareLink(link, lastRes.score) }, TOUCH && navigator.share ? t('share') : t('copyLink'))))); }
+            H('div', { class: 'cv-acts' }, H('button', { type: 'button', class: 'btn btn-buy btn-sm', onClick: () => shareChallenge(lastRes) }, t('challengeFriend'))))); }
         emit('rewardClaimed', { kind: rw.kind, product_id: rw.product_id || null, newsletter: nl.checked });
         if (nl.checked) { const n = await subscribeNewsletter(opts.newsletter, em, shopUrl); emit('newsletter', { ok: !!n.ok, reason: n.reason || null }); if (n.ok) toast(t('nlOk'), 5000); }
       });
@@ -496,13 +527,7 @@ export async function mount(el, opts = {}) {
       H('div', { class: 'cv-acts' }, r.apply_url ? H('a', { class: 'btn btn-ride btn-sm', href: new URL(r.apply_url, new URL(shopUrl, location.href)).href, target: '_top' }, t('applyCart')) : null,
         p && p.url ? H('a', { class: 'btn btn-ghost btn-sm', href: new URL(p.url, new URL(shopUrl, location.href)).href, target: '_top' }, t('seeProduct')) : null));
   }
-  function ensurePseudo(then) {
-    if (!server || profile.pseudo) return then();
-    const card = H('div', { class: 'card small' }, H('h2', {}, t('pseudoTitle')), H('p', {}, t('pseudoBeforeShare')));
-    const prev = modal ? modal.firstChild : null;
-    closeModal(); modal = H('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, card); root.append(modal);
-    askPseudo(card, () => { closeModal(); if (prev) { modal = H('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, prev); root.append(modal); } then(); });
-  }
+  function ensurePseudo(then) { if (profile.pseudo) return then(); openPseudo(then); }
   function askPseudo(hostCard, onDone) {
     const input = H('input', { type: 'text', minlength: 2, maxlength: 12, autocomplete: 'nickname', 'aria-label': t('pseudoTitle'), value: profile.pseudo || '' });
     const err = H('div', { class: 'err' }), btn = H('button', { class: 'btn btn-ride', type: 'submit' }, t('pseudoOk'));
@@ -511,7 +536,7 @@ export async function mount(el, opts = {}) {
     const host = hostCard || (modal && modal.querySelector('.card')); if (host) { if (hostCard) host.append(box); else host.insertBefore(box, host.children[3] || null); }
     f.addEventListener('submit', async (e) => {
       e.preventDefault(); const v = input.value.trim(); if (v.length < 2) { err.textContent = t('pseudo_too_short'); return; } if (v.length > 12) { err.textContent = t('pseudo_too_long'); return; }
-      btn.disabled = true; const r = await srv('pseudo', { device_id: did, pseudo: v }, 6000); btn.disabled = false;
+      btn.disabled = true; const r = server ? await srv('pseudo', { device_id: did, pseudo: v }, 6000) : { ok: true, pseudo: v }; btn.disabled = false;
       if (r && r.ok) { profile.pseudo = r.pseudo || v; saveProfile(); { const b = load('challenge', null); if (b) save('challenge', { ...b, n: profile.pseudo }); } box.replaceWith(H('div', { class: 'note' }, '✓ ' + profile.pseudo)); emit('pseudoSet', { pseudo: profile.pseudo }); if (onDone) onDone(); }
       else { const why = (r && r.reason) || '?'; err.textContent = t('pseudo_' + why) !== 'pseudo_' + why ? t('pseudo_' + why) : t('pseudoErr', { r: why }); }
     });
@@ -575,8 +600,24 @@ export async function mount(el, opts = {}) {
     } catch (e) { if (e && e.name === 'AbortError') return; }
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'respawn-run.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast(t('pngSaved'));
   }
-  async function shareChallenge(res) { ensurePseudo(() => shareLink(myChallenge(res), res.score)); }
-  async function shareBest() { ensurePseudo(() => { const b = load('challenge', null); const link = bestChallengeLink(shopUrl); if (link) shareLink(link, b.sc); }); }
+  async function shareChallenge(res) { ensurePseudo(() => challengePanel(myChallenge(res), res.score)); }
+  async function shareBest() { const b = load('challenge', null); if (!b) { toast(t('chNoRun'), 3500); return; } ensurePseudo(() => challengePanel(bestChallengeLink(shopUrl), b.sc)); }
+  function challengePanel(link, score) {
+    save('challengeLast', link); emit('share', { kind: 'challenge', score, link, panel: true });
+    const msg = t('shareText', { score: fmt(score) }) + ' ' + link;
+    const input = H('input', { class: 'chlink', type: 'text', readonly: true, value: link, 'aria-label': 'Lien', onFocus: (e) => e.target.select() });
+    const copy = H('button', { class: 'btn btn-buy btn-sm', onClick: async () => { try { await navigator.clipboard.writeText(link); toast(t('copied')); } catch (e) { input.focus(); input.select(); } } }, t('chCopy'));
+    const acts = H('div', { class: 'chacts' }, copy,
+      H('a', { class: 'btn btn-ghost btn-sm', href: 'https://wa.me/?text=' + encodeURIComponent(msg), target: '_blank', rel: 'noopener' }, 'WhatsApp'),
+      H('a', { class: 'btn btn-ghost btn-sm', href: 'sms:?&body=' + encodeURIComponent(msg) }, 'SMS'),
+      navigator.share ? H('button', { class: 'btn btn-ghost btn-sm', onClick: async () => { try { await navigator.share({ url: link, text: t('shareText', { score: fmt(score) }) }); } catch (e) { /* annulé */ } } }, t('chShare')) : null);
+    const prev = modal ? modal.firstChild : null;
+    const card = H('div', { class: 'card small chpanel' }, H('div', { class: 'kicker', style: 'margin-top:6px' }, t('chPanelTitle')),
+      H('div', { class: 'chprev' }, H('small', {}, t('chPanelPreview')), H('b', {}, t('chTitle', { name: profile.pseudo || t('aRider') })), H('span', { class: 'big' }, fmt(score) + ' pts'), H('span', {}, t('chGhostOk'))),
+      H('p', {}, t('chPanelText')), input, acts,
+      H('button', { class: 'btn btn-ghost', style: 'width:100%;margin-top:10px', onClick: () => { closeModal(); if (prev) { modal = H('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, prev); root.append(modal); } } }, t('close')));
+    closeModal(); modal = H('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' }, card); root.append(modal);
+  }
   async function shareLink(link, score) {
     save('challengeLast', link);
     emit('share', { kind: 'challenge', score, link });
